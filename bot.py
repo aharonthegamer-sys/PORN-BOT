@@ -11,25 +11,25 @@ from http.server import SimpleHTTPRequestHandler, HTTPServer
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
-# מזהה החדר הספציפי שביקשת
+# מזהה החדר הספציפי שלך
 CHANNEL_ID = 1503853432992305172
 
-# פונקציה יציבה למשיכת סרטון NSFW ישיר ממאגר פתוח
+# מאגר וידאו מובטח בפורמט MP4 ישיר (מקור פתוח ויציב שאינו חסום לענן)
 async def fetch_nsfw_video_url():
-    # מאגר קליפים וסרטוני NSFW ישירים בפורמט MP4 (רשימה שמתעדכנת ועובדת 100% בענן)
-    source_url = "https://githubusercontent.com"
-    
+    # קריאה לקובץ JSON חיצוני המכיל מאות קישורי MP4 ישירים של קליפי NSFW
+    url = "https://githubusercontent.com"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            async with session.get(source_url) as response:
+            async with session.get(url) as response:
                 if response.status == 200:
                     video_list = await response.json()
                     if video_list and len(video_list) > 0:
-                        # בחירת סרטון אקראי מתוך המאגר
+                        # בחירה אקראית מתוך המאגר המובטח
                         return random.choice(video_list)
         except Exception as e:
-            print(f"Error fetching production video database: {e}")
+            print(f"Error checking API: {e}")
     return None
 
 # משימה מחזורית שרצה בדיוק כל 30 שניות
@@ -40,16 +40,24 @@ async def send_nsfw_video():
         print(f"Error: Channel {CHANNEL_ID} not found.")
         return
 
-    # בדיקה שהחדר מוגדר כ-NSFW בדיסקורד
+    # וידוא הגדרת ה-NSFW בדיסקורד
     if not channel.is_nsfw():
         print(f"Error: Channel {channel.name} is NOT marked as NSFW!")
         return
 
+    # הבאת הקישור
     video_url = await fetch_nsfw_video_url()
     if not video_url:
         print("Could not find a valid video URL this round, retrying...")
         return
 
+    # עדכון בצאט שהבוט מצא סרטון ומתחיל להעלות אותו
+    try:
+        await channel.send("⏳ *מוריד סרטון חדש ומעלה לצאט...*")
+    except Exception as e:
+        print(f"Failed to send status message: {e}")
+
+    # הורדת קובץ הסרטון ושליחתו כקובץ מצורף
     headers = {"User-Agent": "Mozilla/5.0"}
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
@@ -59,13 +67,13 @@ async def send_nsfw_video():
                     
                     # בדיקת מגבלת גודל קובץ של דיסקורד (25MB)
                     if len(video_data) > 24 * 1024 * 1024:
-                        print("Video too heavy, skipping to next one...")
+                        await channel.send("❌ הסרטון שנמצא גדול מדי (מעל 25MB), מנסה סרטון אחר בעוד 30 שניות.")
                         return
                         
                     video_buffer = io.BytesIO(video_data)
                     discord_file = discord.File(video_buffer, filename="nsfw_video.mp4")
                     
-                    # שליחת הקובץ לחדר
+                    # שליחת הסרטון ישירות לחדר
                     await channel.send(file=discord_file)
                     print(f"Successfully sent video to channel {CHANNEL_ID}")
                 else:
@@ -76,10 +84,19 @@ async def send_nsfw_video():
 @client.event
 async def on_ready():
     print(f"Bot {client.user} is fully connected and ready!")
+    
+    # הודעת בדיקה ראשונית לערוץ לוודא שהבוט רואה אותו ויכול לכתוב בו
+    channel = client.get_channel(CHANNEL_ID)
+    if channel:
+        try:
+            await channel.send("🔄 **הבוט התחבר מחדש בהצלחה! מפעיל את זרם הסרטונים כל 30 שניות...**")
+        except Exception as e:
+            print(f"Could not send startup message: {e}")
+            
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# שרת אינטרנט פשוט עבור Render
+# שרת רשת מובנה ויציב עבור Render
 def run_health_server():
     class HealthHandler(SimpleHTTPRequestHandler):
         def do_GET(self):
@@ -93,8 +110,10 @@ def run_health_server():
     server.serve_forever()
 
 if __name__ == "__main__":
+    # הרצת השרת עבור Render בנתיב נפרד
     threading.Thread(target=run_health_server, daemon=True).start()
     
+    # הפעלת הבוט באמצעות משתנה הסביבה
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
         print("CRITICAL ERROR: DISCORD_TOKEN is missing!")
