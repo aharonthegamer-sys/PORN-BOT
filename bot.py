@@ -1,6 +1,7 @@
 import discord
 from discord.ext import tasks
 import aiohttp
+import aiohttp.web  # תיקון קריטי: ייבוא מפורש של שרת הרשת כדי למנוע קריסה ב-Render
 import io
 import os
 import random
@@ -12,12 +13,10 @@ client = discord.Client(intents=intents)
 # מזהה החדר הספציפי שביקשת
 CHANNEL_ID = 1503853432992305172
 
-# פונקציה למשיכת סרטונים מ-Scrolller API (מאגר יציב שאינו חוסם את Render)
+# פונקציה למשיכת סרטונים מ-Scrolller API
 async def fetch_nsfw_video_url():
-    # פנייה ל-API הציבורי של Scrolller לקבלת מדיה אקראית בקטגוריית NSFW
     url = "https://scrolller.com"
     
-    # שאילתת GraphQL מותאמת לשליפת סרטונים בלבד
     query = {
         "query": """
         query DiscoverSubreddits {
@@ -45,12 +44,10 @@ async def fetch_nsfw_video_url():
                     data = await response.json()
                     subreddits = data.get("data", {}).get("discoverSubreddits", {}).get("items", [])
                     
-                    # איסוף כל הקישורים שהם סרטונים (לא תמונות סטטיות)
                     video_urls = []
                     for sub in subreddits:
                         media_items = sub.get("media", {}).get("items", [])
                         for item in media_items:
-                            # אם isStatic הוא False, מדובר בסרטון/גיף נע
                             if not item.get("isStatic", True):
                                 media_url = item.get("url", "")
                                 if media_url and media_url.endswith(('.mp4', '.webm')):
@@ -67,20 +64,19 @@ async def fetch_nsfw_video_url():
 async def send_nsfw_video():
     channel = client.get_channel(CHANNEL_ID)
     if not channel:
-        print(f"Error: Channel {CHANNEL_ID} not found. Ensure the bot is inside the server.")
+        print(f"Error: Channel {CHANNEL_ID} not found.")
         return
 
-    # הגנה מפני חסימה - הערוץ חייב להיות מוגדר NSFW בדיסקורד
+    # הערוץ חייב להיות מוגדר NSFW בדיסקורד
     if not channel.is_nsfw():
-        print(f"Error: Channel {channel.name} is NOT marked as NSFW in Discord settings!")
+        print(f"Error: Channel {channel.name} is NOT marked as NSFW!")
         return
 
     video_url = await fetch_nsfw_video_url()
     if not video_url:
-        print("Could not find a valid video URL this round, retrying in 30s...")
+        print("Could not find a valid video URL this round, retrying...")
         return
 
-    # הורדת הקובץ ושליחתו כקובץ מצורף לצפייה ישירה
     headers = {"User-Agent": "Mozilla/5.0"}
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
@@ -90,7 +86,7 @@ async def send_nsfw_video():
                     
                     # בדיקת מגבלת גודל קובץ של דיסקורד (25MB)
                     if len(video_data) > 24 * 1024 * 1024:
-                        print("Video file is too heavy, skipping to next round...")
+                        print("Video too heavy, skipping...")
                         return
                         
                     video_buffer = io.BytesIO(video_data)
@@ -99,7 +95,7 @@ async def send_nsfw_video():
                     await channel.send(file=discord_file)
                     print(f"Successfully sent video to channel {CHANNEL_ID}")
                 else:
-                    print(f"Failed to download file from host. Status: {resp.status}")
+                    print(f"Failed to download file. Status: {resp.status}")
         except Exception as e:
             print(f"Discord upload error: {e}")
 
@@ -109,7 +105,7 @@ async def on_ready():
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# שרת אינטרנט כדי למנוע מ-Render לכבות את האפליקציה בתוכנית החינמית
+# שרת אינטרנט תקין עבור Render
 async def web_server():
     app = aiohttp.web.Application()
     app.router.add_get('/', lambda r: aiohttp.web.Response(text="Bot Working Perfectly"))
@@ -123,7 +119,7 @@ async def main():
     await web_server()
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
-        print("CRITICAL ERROR: DISCORD_TOKEN is missing in Render environment variables!")
+        print("CRITICAL ERROR: DISCORD_TOKEN is missing!")
         return
     await client.start(token)
 
