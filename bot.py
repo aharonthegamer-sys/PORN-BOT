@@ -1,10 +1,11 @@
 import discord
 from discord.ext import tasks
 import aiohttp
-import aiohttp.web  # תיקון קריטי: ייבוא מפורש של שרת הרשת כדי למנוע קריסה ב-Render
 import io
 import os
 import random
+import threading
+from http.server import SimpleHTTPRequestHandler, HTTPServer
 
 # הגדרת הרשאות בסיסיות לבוט
 intents = discord.Intents.default()
@@ -16,7 +17,6 @@ CHANNEL_ID = 1503853432992305172
 # פונקציה למשיכת סרטונים מ-Scrolller API
 async def fetch_nsfw_video_url():
     url = "https://scrolller.com"
-    
     query = {
         "query": """
         query DiscoverSubreddits {
@@ -34,7 +34,6 @@ async def fetch_nsfw_video_url():
         }
         """
     }
-    
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
     async with aiohttp.ClientSession(headers=headers) as session:
@@ -67,7 +66,6 @@ async def send_nsfw_video():
         print(f"Error: Channel {CHANNEL_ID} not found.")
         return
 
-    # הערוץ חייב להיות מוגדר NSFW בדיסקורד
     if not channel.is_nsfw():
         print(f"Error: Channel {channel.name} is NOT marked as NSFW!")
         return
@@ -84,7 +82,6 @@ async def send_nsfw_video():
                 if resp.status == 200:
                     video_data = await resp.read()
                     
-                    # בדיקת מגבלת גודל קובץ של דיסקורד (25MB)
                     if len(video_data) > 24 * 1024 * 1024:
                         print("Video too heavy, skipping...")
                         return
@@ -105,24 +102,26 @@ async def on_ready():
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# שרת אינטרנט תקין עבור Render
-async def web_server():
-    app = aiohttp.web.Application()
-    app.router.add_get('/', lambda r: aiohttp.web.Response(text="Bot Working Perfectly"))
-    runner = aiohttp.web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 8080))
-    site = aiohttp.web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
+# שרת אינטרנט פשוט ויציב שרץ ברקע ולא תלוי ב-aiohttp
+def run_health_server():
+    class HealthHandler(SimpleHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"Bot Alive")
 
-async def main():
-    await web_server()
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    server.serve_forever()
+
+if __name__ == "__main__":
+    # הפעלת שרת הבריאות עבור Render בנתיב נפרד (Thread)
+    threading.Thread(target=run_health_server, daemon=True).start()
+    
+    # הפעלת הבוט מדיסקורד
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
         print("CRITICAL ERROR: DISCORD_TOKEN is missing!")
-        return
-    await client.start(token)
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    else:
+        client.run(token)
