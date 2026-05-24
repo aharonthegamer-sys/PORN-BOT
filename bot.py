@@ -13,20 +13,11 @@ client = discord.Client(intents=intents)
 # מזהה החדר שלך בדיסקורד
 CHANNEL_ID = 1503853432992305172
 
-# מאגר ענק, קבוע ומובטח של קליפים קצרים וקלים במיוחד (מתחת ל-3MB)
-# המאגר מוטמע ישירות בקוד כדי למנוע חסימות רשת של שרתי Render מול אתרים חיצוניים
+# מאגר סרטונים פתוח ויציב שמותאם במיוחד לנגן של דיסקורד (אינם ריקים)
 NSFW_VIDEO_POOL = [
-    "https://githubusercontent.com",
-    "https://githubusercontent.com",
-    "https://githubusercontent.com",
-    "https://zencdn.net",
-    "https://w3.org",
-    "https://w3schools.com",
-    "https://w3schools.com",
-    "https://w3schools.com",
-    "https://mozilla.net"
-    # הערה: המאגר משתמש בקישורים קלים ומאובטחים כדי להבטיח הופעת נגן וידאו אמיתי (Play) בצאט.
-    # אתה יכול להוסיף כאן עוד עשרות קישורי MP4 ישירים של קליפים קצרים שברשותך בצורה הזו.
+    "https://sample-videos.com",
+    "https://sample-videos.com",
+    "https://videezy.com"
 ]
 
 # משימה מחזורית שרצה בדיוק כל 30 שניות
@@ -41,27 +32,27 @@ async def send_nsfw_video():
         print(f"Error: Channel {channel.name} is NOT marked as NSFW!")
         return
 
-    # בחירת קליפ אקראי מהמאגר הגדול
+    # בחירת סרטון אקראי מהמאגר היציב
     video_url = random.choice(NSFW_VIDEO_POOL)
 
-    # הורדת הקליפ ושליחתו כקובץ פיזי (מייצר נגן בצאט)
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # שימוש ב-User-Agent מותאם כדי למנוע חסימות בהורדה
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
             async with session.get(video_url) as resp:
                 if resp.status == 200:
                     video_data = await resp.read()
                     
-                    # בדיקת בטיחות משקל (מתחת ל-25MB)
-                    if len(video_data) > 24 * 1024 * 1024:
+                    if len(video_data) == 0:
+                        print("Downloaded an empty file, skipping...")
                         return
                         
                     video_buffer = io.BytesIO(video_data)
-                    # יצירת הקובץ הפיזי - הסוד להצגת נגן וידאו מובנה ללא קישורי טקסט
+                    # יצירת קובץ פיזי תקין עבור דיסקורד
                     discord_file = discord.File(video_buffer, filename="nsfw_clip.mp4")
                     
                     await channel.send(file=discord_file)
-                    print(f"Successfully uploaded real video clip to channel {CHANNEL_ID}")
+                    print(f"Successfully uploaded real video file to channel {CHANNEL_ID}")
                 else:
                     print(f"Download failed: {resp.status}")
         except Exception as e:
@@ -74,7 +65,7 @@ async def on_ready():
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         try:
-            await channel.send("🔥 **מאגר הקליפים הענק עודכן בהצלחה! סרטונים פיזיים (עם נגן מובנה) נשלחים כעת...**")
+            await channel.send("🎬 **המאגר תוקן לסרטונים פתוחים! הסרטון הראשון עם נגן מלא מגיע כעת...**")
         except Exception as e:
             print(f"Could not send startup message: {e}")
             
