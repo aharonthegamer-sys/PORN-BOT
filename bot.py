@@ -9,66 +9,44 @@ from http.server import SimpleHTTPRequestHandler, HTTPServer
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
-# מזהה החדר המדויק שלך מהתמונה
+# מזהה החדר המדויק שלך מדיסקורד
 CHANNEL_ID = 1503853432992305172
 
-# משימה מחזורית שרצה כל 2 דקות למניעת חסימת קצב (Rate Limit) בדיסקורד
+# משימה מחזורית שרצה כל 2 דקות (למניעת חסימת קצב מדיסקורד)
 @tasks.loop(minutes=2)
 async def send_nsfw_video():
     channel = client.get_channel(CHANNEL_ID)
     if not channel or not channel.is_nsfw():
         return
 
-    # מילות מפתח ממוקדות לחיפוש
-    keywords = ["hot", "sexy", "babe", "amateur"]
-    search_word = random.choice(keywords)
-
+    # הכתובת המדויקת והמתוקנת ל-API הרשמי
+    query_keywords = ["amateur", "babe", "milf", "hardcore"]
+    keyword = random.choice(query_keywords)
+    url = f"https://eporner.com{keyword}&per_page=30&order=top-weekly&format=json"
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-
+    
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            # שלב 1: קבלת אסימון גישה זמני (Temporary Token) מכתובת ה-API הרשמית והנכונה
-            auth_url = "https://redgifs.com"
-            async with session.get(auth_url) as auth_resp:
-                if auth_resp.status != 200:
-                    print(f"Failed to get Redgifs token: {auth_resp.status}")
-                    return
-                auth_data = await auth_resp.json()
-                token = auth_data.get("token")
-            
-            if not token:
-                print("Token not found in auth response.")
-                return
-
-            # עדכון ה-Headers עם אסימון הגישה שקיבלנו עבור שלב החיפוש
-            headers["Authorization"] = f"Bearer {token}"
-            
-            # שלב 2: פנייה לנתיב החיפוש הרשמי והמלא של שרתי האתר
-            search_url = f"https://redgifs.com{search_word}&order=trending&count=40"
-            async with session.get(search_url, headers=headers) as response:
+            async with session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
-                    gifs = data.get("gifs", [])
-                    
-                    if gifs:
-                        random_gif = random.choice(gifs)
-                        # לקיחת המזהה הייחודי של הסרטון (לדוגמה: ThriftyGiddyGopher)
-                        video_id = random_gif.get("id") 
+                    videos = data.get("videos", [])
+                    if videos:
+                        # בחירת סרטון אקראי מתוך התוצאות החיות
+                        random_video = random.choice(videos)
+                        video_url = random_video.get("url", "")
                         
-                        if video_id:
-                            # הקישור המדויק שדיסקורד מזהה אוטומטית והופך לנגן וידאו (Play Embed) פתוח בצאט
-                            watch_url = f"https://redgifs.com{video_id}"
-                            await channel.send(watch_url)
-                            print(f"Successfully sent Redgifs video player to channel {CHANNEL_ID}")
-                    else:
-                        print("No gifs found for this keyword.")
+                        if video_url:
+                            # שליחת הקישור - דיסקורד הופך אותו אוטומטית לנגן וידאו (Play) מובנה בצאט!
+                            await channel.send(video_url)
+                            print(f"Successfully sent video player to channel {CHANNEL_ID}")
                 else:
-                    print(f"Redgifs Search API error: {response.status}")
-                    
+                    print(f"API returned status code: {response.status}")
         except Exception as e:
-            print(f"Network error with Redgifs API: {e}")
+            print(f"Error fetching active videos: {e}")
 
 @client.event
 async def on_ready():
@@ -77,14 +55,14 @@ async def on_ready():
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         try:
-            await channel.send("🚀 **ליבת ה-API של Lawliet/Redgifs אופטמלה במלואה! הזרמת הנגנים מתחילה...**")
+            await channel.send("🎬 **הליבה הסופית הופעלה בהצלחה! הזרמת הסרטונים בנגנים מובנים מתחילה כעת...**")
         except Exception as e:
             print(f"Startup prompt failed: {e}")
-
+            
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# שרת ה-Health Check עבור הפלטפורמה של Render כדי שהבוט לא ייכבה
+# שרת רשת מובנה (Health Check) עבור הפלטפורמה של Render כדי שהבוט לא ייכבה
 def run_health_server():
     class HealthHandler(SimpleHTTPRequestHandler):
         def do_GET(self):
@@ -104,4 +82,4 @@ if __name__ == "__main__":
     if token:
         client.run(token)
     else:
-        print("Error: DISCORD_TOKEN environment variable is missing.")
+        print("Error: DISCORD_TOKEN variable is missing.")
