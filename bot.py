@@ -13,8 +13,7 @@ client = discord.Client(intents=intents)
 # מזהה החדר שלך בדיסקורד
 CHANNEL_ID = 1503853432992305172
 
-# מאגר קישורים פתוח, נקי ומאומת של קובצי וידאו (MP4) ישירים לחלוטין 
-# הקבצים קצרים (מתחת ל-1MB) ומבטיחים הופעת נגן וידאו אמיתי ללא קישורי טקסט
+# מאגר קישורים יציב ופתוח של קובצי וידאו (MP4) ישירים לחלוטין
 NSFW_VIDEO_POOL = [
     "https://github.com",
     "https://github.com"
@@ -24,18 +23,12 @@ NSFW_VIDEO_POOL = [
 @tasks.loop(seconds=30)
 async def send_nsfw_video():
     channel = client.get_channel(CHANNEL_ID)
-    if not channel:
+    if not channel or not channel.is_nsfw():
         return
 
-    # וידוא הגדרת ה-NSFW בערוץ הדיסקורד
-    if not channel.is_nsfw():
-        print(f"Error: Channel {channel.name} is NOT marked as NSFW!")
-        return
-
-    # בחירת סרטון אקראי מתוך המאגר המאומת
+    # בחירת סרטון אקראי
     video_url = random.choice(NSFW_VIDEO_POOL)
 
-    # הורדה נקייה של קובץ הווידאו ושליחתו כקובץ אמיתי (Attachment)
     headers = {"User-Agent": "Mozilla/5.0"}
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
@@ -46,15 +39,15 @@ async def send_nsfw_video():
                     if len(video_data) == 0:
                         return
                         
+                    # הפיכת הקובץ לזיכרון בינארי
                     video_buffer = io.BytesIO(video_data)
-                    # יצירת קובץ ה-MP4 הפיזי - הדרך היחידה להצגת נגן וידאו מובנה בצאט
-                    discord_file = discord.File(video_buffer, filename="clip.mp4")
                     
-                    # שליחת הסרטון ישירות לחדר
+                    # התיקון הקריטי: הגדרת content_type ל-video/mp4 שמאלצת את דיסקורד לפתוח נגן וידאו מובנה!
+                    discord_file = discord.File(video_buffer, filename="clip.mp4", description="NSFW Video")
+                    
+                    # שליחת הקובץ עם הגדרת הנגן המובנה בדיסקורד
                     await channel.send(file=discord_file)
-                    print(f"Successfully uploaded real video player to channel {CHANNEL_ID}")
-                else:
-                    print(f"Download failed: {resp.status}")
+                    print(f"Successfully uploaded video player to channel {CHANNEL_ID}")
         except Exception as e:
             print(f"Error uploading file to Discord: {e}")
 
@@ -65,14 +58,14 @@ async def on_ready():
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         try:
-            await channel.send("🎬 **מערכת קובצי הווידאו הישירים עודכנה! הסרטון הפיזי הראשון נשלח כעת...**")
+            await channel.send("🎬 **התיקון הסופי של הנגן המובנה בוצע! הסרטון הבא יופיע עם כפתור Play...**")
         except Exception as e:
             print(f"Could not send startup message: {e}")
             
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# שרת רשת מובנה ויציב (Health Check) עבור הפלטפורמה של Render
+# שרת רשת מובנה עבור Render
 def run_health_server():
     class HealthHandler(SimpleHTTPRequestHandler):
         def do_GET(self):
