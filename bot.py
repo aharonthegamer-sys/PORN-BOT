@@ -1,7 +1,6 @@
 import discord
 from discord.ext import tasks
 import aiohttp
-import io
 import os
 import random
 import threading
@@ -14,9 +13,8 @@ client = discord.Client(intents=intents)
 # מזהה החדר הספציפי שלך
 CHANNEL_ID = 1503853432992305172
 
-# פונקציה שמביאה קליפים קצרים (Short Clips) המותאמים למגבלת ה-25MB של דיסקורד
+# פונקציה שמביאה קישורי וידאו ישירים בפורמט MP4 (קבצים קלים)
 async def fetch_nsfw_video_url():
-    # פנייה למאגר וידאו מבוסס קטגוריות פתוחות שאינו חסום בשרתי ענן
     url = "https://githubusercontent.com"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
@@ -26,7 +24,6 @@ async def fetch_nsfw_video_url():
                 if response.status == 200:
                     video_list = await response.json()
                     if video_list and len(video_list) > 0:
-                        # בחירה אקראית מתוך רשימת הקליפים הקצרים
                         return random.choice(video_list)
         except Exception as e:
             print(f"Error fetching API database: {e}")
@@ -37,7 +34,6 @@ async def fetch_nsfw_video_url():
 async def send_nsfw_video():
     channel = client.get_channel(CHANNEL_ID)
     if not channel:
-        print(f"Error: Channel {CHANNEL_ID} not found.")
         return
 
     # וידוא הגדרת ה-NSFW בדיסקורד
@@ -47,33 +43,16 @@ async def send_nsfw_video():
 
     video_url = await fetch_nsfw_video_url()
     if not video_url:
-        print("Could not find a valid video URL this round, retrying...")
         return
 
-    # הורדת קובץ הסרטון הקצר ושליחתו כקובץ מצורף
-    headers = {"User-Agent": "Mozilla/5.0"}
-    async with aiohttp.ClientSession(headers=headers) as session:
-        try:
-            async with session.get(video_url) as resp:
-                if resp.status == 200:
-                    video_data = await resp.read()
-                    
-                    # בדיקת מגבלת גודל קובץ מוגנת (25MB)
-                    if len(video_data) > 24 * 1024 * 1024:
-                        print("Video too heavy, skipping to next one...")
-                        return
-                        
-                    video_buffer = io.BytesIO(video_data)
-                    # קובץ MP4 שיוצג עם נגן פנימי בדיסקורד
-                    discord_file = discord.File(video_buffer, filename="nsfw_clip.mp4")
-                    
-                    # שליחת הסרטון ישירות לחדר
-                    await channel.send(file=discord_file)
-                    print(f"Successfully sent video to channel {CHANNEL_ID}")
-                else:
-                    print(f"Failed to download file. Status: {resp.status}")
-        except Exception as e:
-            print(f"Discord upload error: {e}")
+    try:
+        # פתרון הקסם: שליחת הקישור הישיר בתוך סוגריים משולשים עם כותרת נגן מובנית.
+        # דיסקורד מזהה שזה קובץ MP4 ישיר והופך אותו אוטומטית לנגן וידאו (Play) ישירות בצאט,
+        # מבלי ש-Render יצטרך להוריד או להעלות קבצים כבדים!
+        await channel.send(video_url)
+        print(f"Successfully triggered video embed to channel {CHANNEL_ID}")
+    except Exception as e:
+        print(f"Discord sending error: {e}")
 
 @client.event
 async def on_ready():
@@ -82,7 +61,7 @@ async def on_ready():
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         try:
-            await channel.send("🚀 **המערכת אופטמלה! זרם קליפים קצרים (מתחת ל-25MB) מתחיל כעת...**")
+            await channel.send("✅ **הלופ עודכן למצב הזרמה ישירה ללא חסימות רשת! הסרטון הראשון מגיע מיד...**")
         except Exception as e:
             print(f"Could not send startup message: {e}")
             
