@@ -6,7 +6,7 @@ from discord.ext import commands, tasks
 from flask import Flask
 from threading import Thread
 
-# שרת אינטרנט קטן בשביל Render שלא יכבה את הבוט
+# הגדרת שרת אינטרנט תואם במאה אחוז ל-Render
 app = Flask('')
 
 @app.route('/')
@@ -14,7 +14,9 @@ def home():
     return "The bot is running successfully!"
 
 def run_flask():
-    app.run(host='0.0.0.0', port=10000)
+    # Render מעביר את הפורט הנכון דרך משתנה סביבה בשם PORT, ואנחנו חייבים להשתמש בו
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 
 # הגדרת הבוט בדיסקורד
 intents = discord.Intents.default()
@@ -41,7 +43,6 @@ async def send_nsfw_video():
 
     try:
         async with aiohttp.ClientSession() as session:
-            # פנייה ל-API שמביא סרטונים אקראיים (לדוגמה Redgifs)
             async with session.get("https://redgifs.com") as response:
                 if response.status == 200:
                     data = await response.json()
@@ -52,14 +53,13 @@ async def send_nsfw_video():
                         video_url = chosen_gif.get('urls', {}).get('hd', chosen_gif.get('urls', {}).get('sd'))
                         
                         if video_url:
-                            # הורדת הסרטון והעלאתו כקובץ ישיר לדיסקורד
                             async with session.get(video_url) as vid_resp:
                                 if vid_resp.status == 200:
                                     video_data = await vid_resp.read()
                                     from io import BytesIO
                                     video_file = discord.File(BytesIO(video_data), filename="nsfw_video.mp4")
                                     
-                                    await channel.send(content="🔥 סרטון חדש:", file=video_file)
+                                    await channel.send(content="🔥 סרטון חדש:", file=file)
                                     print("הסרטון נשלח בהצלחה!")
     except Exception as e:
         print(f"שגיאה בשליחת הסרטון: {e}")
@@ -70,7 +70,7 @@ async def on_ready():
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# הרצת השרת ברקע
+# הרצת השרת ברקע בפורט הנכון
 Thread(target=run_flask).start()
 
 # הפעלת הבוט עם הטוקן מ-Render
