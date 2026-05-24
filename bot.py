@@ -12,57 +12,78 @@ client = discord.Client(intents=intents)
 # מזהה החדר המדויק שלך מדיסקורד
 CHANNEL_ID = 1503853432992305172
 
-# משימה מחזורית שרצה כל 2 דקות (למניעת חסימת קצב מדיסקורד)
+# משימה מחזורית שרצה כל 2 דקות למניעת Rate Limit בדיסקורד
 @tasks.loop(minutes=2)
 async def send_nsfw_video():
     channel = client.get_channel(CHANNEL_ID)
     if not channel or not channel.is_nsfw():
         return
 
-    # הכתובת המדויקת והמתוקנת ל-API הרשמי
-    query_keywords = ["amateur", "babe", "milf", "hardcore"]
-    keyword = random.choice(query_keywords)
-    url = f"https://eporner.com{keyword}&per_page=30&order=top-weekly&format=json"
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    # פנייה למאגר המשולב שמביא קליפים מהקטגוריות של האתרים שביקשת
+    url = "https://scrolller.com"
+    query = {
+        "query": """
+        query DiscoverSubreddits {
+            discoverSubreddits(filter: NSFW, limit: 30) {
+                items {
+                    media(limit: 50) {
+                        items {
+                            url
+                            isStatic
+                        }
+                    }
+                }
+            }
+        }
+        """
     }
+    
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            async with session.get(url) as response:
+            async with session.post(url, json=query) as response:
                 if response.status == 200:
                     data = await response.json()
-                    videos = data.get("videos", [])
-                    if videos:
-                        # בחירת סרטון אקראי מתוך התוצאות החיות
-                        random_video = random.choice(videos)
-                        video_url = random_video.get("url", "")
+                    subreddits = data.get("data", {}).get("discoverSubreddits", {}).get("items", [])
+                    
+                    video_urls = []
+                    for sub in subreddits:
+                        media_items = sub.get("media", {}).get("items", [])
+                        for item in media_items:
+                            # סינון קפדני: לוקח רק סרטונים מונפשים שדיסקורד מציג בנגן (Play)
+                            if not item.get("isStatic", True):
+                                media_url = item.get("url", "")
+                                if media_url and media_url.endswith(('.mp4', '.webm')):
+                                    video_urls.append(media_url)
+                    
+                    if video_urls:
+                        # בחירת סרטון אקראי מתוך המאגר המלא
+                        chosen_video = random.choice(video_urls)
                         
-                        if video_url:
-                            # שליחת הקישור - דיסקורד הופך אותו אוטומטית לנגן וידאו (Play) מובנה בצאט!
-                            await channel.send(video_url)
-                            print(f"Successfully sent video player to channel {CHANNEL_ID}")
+                        # שליחת הקישור המאושר - דיסקורד מזהה את המקור ופותח נגן וידאו מובנה חלק!
+                        await channel.send(chosen_video)
+                        print(f"Successfully sent active video to channel {CHANNEL_ID}")
                 else:
-                    print(f"API returned status code: {response.status}")
+                    print(f"API Server Error: {response.status}")
         except Exception as e:
-            print(f"Error fetching active videos: {e}")
+            print(f"Network processing error: {e}")
 
 @client.event
 async def on_ready():
-    print(f"Bot {client.user} is online and running successfully!")
+    print(f"Bot {client.user} is online and running successfully on Render!")
     
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         try:
-            await channel.send("🎬 **הליבה הסופית הופעלה בהצלחה! הזרמת הסרטונים בנגנים מובנים מתחילה כעת...**")
+            await channel.send("👑 **המערכת המאוחדת הופעלה בהצלחה! הזרמת הנגנים מתחילה כעת...**")
         except Exception as e:
             print(f"Startup prompt failed: {e}")
             
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# שרת רשת מובנה (Health Check) עבור הפלטפורמה של Render כדי שהבוט לא ייכבה
+# שרת רשת מובנה (Health Check) חובה עבור Render כדי שהבוט לא ייכבה
 def run_health_server():
     class HealthHandler(SimpleHTTPRequestHandler):
         def do_GET(self):
