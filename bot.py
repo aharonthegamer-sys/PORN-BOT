@@ -12,56 +12,32 @@ client = discord.Client(intents=intents)
 # מזהה החדר הספציפי שביקשת
 CHANNEL_ID = 1503853432992305172
 
-# רשימת מקורות (Subreddits) המבוססים על סרטונים קצרים מכל הסוגים
-NSFW_SUBREDDITS = [
-    "NSFW_GIF", 
-    "nsfw_videos", 
-    "BetterEveryLoop", 
-    "HoldMyCoors"
-]
-
-# פונקציה משופרת למשיכת סרטוני NSFW ישירים מ-Reddit
+# פונקציה שמביאה סרטון NSFW ישיר מ-API פתוח שלא חוסם את Render
 async def fetch_nsfw_video_url():
-    # בוחר סאברדיט אקראי מהרשימה בכל פעם
-    subreddit = random.choice(NSFW_SUBREDDITS)
-    url = f"https://reddit.com{subreddit}/hot.json?limit=50"
+    # חיפוש סרטונים אקראיים ב-API הציבורי
+    query_keywords = ["hardcore", "amateur", "babe", "anal", "milf"]
+    keyword = random.choice(query_keywords)
+    url = f"https://eporner.com{keyword}&per_page=30&thumbsize=big&order=top-weekly&format=json"
     
-    # הגדרת דפדפן מדומה (User-Agent) כדי ש-Reddit לא יחסום את הבקשה
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    
-    async with aiohttp.ClientSession(headers=headers) as session:
+    async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
-                    posts = data.get("data", {}).get("children", [])
+                    videos = data.get("videos", [])
+                    if not videos:
+                        return None
                     
-                    # מערבב את הפוסטים כדי שלא ישלח תמיד אותו דבר
-                    random.shuffle(posts)
+                    # בחירת סרטון אקראי מתוצאות החיפוש
+                    random_video = random.choice(videos)
+                    video_id = random_video.get("id")
                     
-                    for post in posts:
-                        post_data = post.get("data", {})
-                        
-                        # דילוג על פוסטים שאינם NSFW לביטחון
-                        if not post_data.get("over_18", False):
-                            continue
-                            
-                        # אפשרות 1: בדיקה אם הסרטון מאוחסן ישירות ב-Reddit
-                        is_video = post_data.get("is_video", False)
-                        if is_video:
-                            video_url = post_data.get("media", {}).get("reddit_video", {}).get("fallback_url", "")
-                            if video_url:
-                                # ניקוי פרמטרים מיותרים מהקישור של רדיט
-                                return video_url.split('?')[0]
-                        
-                        # אפשרות 2: בדיקה אם יש קישור ישיר לסרטון mp4/webm/mov בסיומת
-                        post_url = post_data.get("url", "")
-                        if post_url.endswith(('.mp4', '.webm', '.mov')):
-                            return post_url
-                            
+                    # שימוש בפורמט הציבורי של האתר לקבלת קובץ ה-MP4 הישיר של הנסיין (Short Clip)
+                    # קליפים אלו קלים ומתאימים בול למגבלת המשקל של דיסקורד
+                    short_clip_url = f"https://eporner.com{video_id}.mp4"
+                    return short_clip_url
         except Exception as e:
-            print(f"שגיאה במשיכת סרטון מ-Reddit: {e}")
-            
+            print(f"API Error: {e}")
     return None
 
 # משימה מחזורית שרצה בדיוק כל 30 שניות
@@ -69,50 +45,51 @@ async def fetch_nsfw_video_url():
 async def send_nsfw_video():
     channel = client.get_channel(CHANNEL_ID)
     if not channel:
-        print(f"החדר לא נמצא: {CHANNEL_ID}")
+        print(f"Channel {CHANNEL_ID} not found. Make sure the bot is in the server.")
         return
 
+    # הגנה מפני חסימת השרת - בדיקה שהחדר מוגדר NSFW
     if not channel.is_nsfw():
-        print(f"אזהרה: החדר {channel.name} אינו מוגדר כ-NSFW בדיסקורד!")
+        print(f"Error: Channel {channel.name} is NOT marked as NSFW in Discord settings!")
         return
 
     video_url = await fetch_nsfw_video_url()
     if not video_url:
-        print("לא נמצא סרטון תקין בסיבוב הזה, מנסה שוב בריצה הבאה...")
+        print("Could not find a video url this round, retrying...")
         return
 
-    # הורדת הקובץ ושליחתו לצפייה ישירה
-    headers = {"User-Agent": "Mozilla/5.0"}
-    async with aiohttp.ClientSession(headers=headers) as session:
+    async with aiohttp.ClientSession() as session:
         try:
             async with session.get(video_url) as resp:
                 if resp.status == 200:
                     video_data = await resp.read()
                     
-                    # בדיקת מגבלת גודל הקובץ של דיסקורד (לרוב עד 10MB–25MB)
-                    if len(video_data) > 25 * 1024 * 1024:
-                        print("הסרטון גדול מדי עבור דיסקורד, מנסה סרטון אחר...")
+                    # הגבלת גודל קובץ לשרת דיסקורד רגיל (עד 25MB)
+                    if len(video_data) > 24 * 1024 * 1024:
+                        print("Video too large, skipping...")
                         return
                         
                     video_buffer = io.BytesIO(video_data)
-                    discord_file = discord.File(video_buffer, filename="nsfw_video.mp4")
+                    discord_file = discord.File(video_buffer, filename="nsfw_clip.mp4")
+                    
+                    # שליחת הקובץ לחדר
                     await channel.send(file=discord_file)
-                    print(f"סרטון נשלח בהצלחה לחדר {CHANNEL_ID}")
+                    print(f"Successfully sent video to channel {CHANNEL_ID}")
                 else:
-                    print(f"שגיאה בהורדת הווידאו: {resp.status}")
+                    print(f"Failed to download video file. Status: {resp.status}")
         except Exception as e:
-            print(f"שגיאה בשליחה לדיסקורד: {e}")
+            print(f"Discord sending error: {e}")
 
 @client.event
 async def on_ready():
-    print(f"הבוט {client.user} מחובר ופועל ב-Render!")
+    print(f"Bot {client.user} is live and working!")
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# שרת אינטרנט קטן עבור Render
+# שרת רשת חובה בשביל ה-Free Tier של Render
 async def web_server():
     app = aiohttp.web.Application()
-    app.router.add_get('/', lambda r: aiohttp.web.Response(text="Bot is running!"))
+    app.router.add_get('/', lambda r: aiohttp.web.Response(text="Bot Alive"))
     runner = aiohttp.web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 8080))
@@ -122,6 +99,9 @@ async def web_server():
 async def main():
     await web_server()
     token = os.environ.get("DISCORD_TOKEN")
+    if not token:
+        print("CRITICAL: DISCORD_TOKEN environment variable is missing!")
+        return
     await client.start(token)
 
 if __name__ == "__main__":
