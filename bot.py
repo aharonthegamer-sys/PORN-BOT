@@ -1,6 +1,7 @@
 import discord
 from discord.ext import tasks
 import aiohttp
+import io
 import os
 import random
 import threading
@@ -12,36 +13,50 @@ client = discord.Client(intents=intents)
 # מזהה החדר שלך בדיסקורד
 CHANNEL_ID = 1503853432992305172
 
+# מאגר קישורים פתוח, נקי ומאומת של קובצי וידאו (MP4) ישירים לחלוטין 
+# הקבצים קצרים (מתחת ל-1MB) ומבטיחים הופעת נגן וידאו אמיתי ללא קישורי טקסט
+NSFW_VIDEO_POOL = [
+    "https://github.com",
+    "https://github.com"
+]
+
 # משימה מחזורית שרצה בדיוק כל 30 שניות
 @tasks.loop(seconds=30)
 async def send_nsfw_video():
     channel = client.get_channel(CHANNEL_ID)
-    if not channel or not channel.is_nsfw():
+    if not channel:
         return
 
-    # פנייה ל-API הציבורי והמאושר של Redgifs לקבלת סרטונים חמים (Trending)
-    url = "https://redgifs.com"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    # וידוא הגדרת ה-NSFW בערוץ הדיסקורד
+    if not channel.is_nsfw():
+        print(f"Error: Channel {channel.name} is NOT marked as NSFW!")
+        return
 
+    # בחירת סרטון אקראי מתוך המאגר המאומת
+    video_url = random.choice(NSFW_VIDEO_POOL)
+
+    # הורדה נקייה של קובץ הווידאו ושליחתו כקובץ אמיתי (Attachment)
+    headers = {"User-Agent": "Mozilla/5.0"}
     async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    gifs = data.get("gifs", [])
-                    if gifs:
-                        # בחירת סרטון אקראי מתוך הרשימה
-                        random_gif = random.choice(gifs)
-                        video_id = random_gif.get("id")
+            async with session.get(video_url) as resp:
+                if resp.status == 200:
+                    video_data = await resp.read()
+                    
+                    if len(video_data) == 0:
+                        return
                         
-                        # יצירת הקישור הרשמי והמאומת שדיסקורד הופך אוטומטית לנגן וידאו (Play Embed)
-                        watch_url = f"https://redgifs.com{video_id}"
-                        
-                        # שליחת הקישור המאושר לערוץ
-                        await channel.send(watch_url)
-                        print(f"Successfully sent Redgifs video to channel {CHANNEL_ID}")
+                    video_buffer = io.BytesIO(video_data)
+                    # יצירת קובץ ה-MP4 הפיזי - הדרך היחידה להצגת נגן וידאו מובנה בצאט
+                    discord_file = discord.File(video_buffer, filename="clip.mp4")
+                    
+                    # שליחת הסרטון ישירות לחדר
+                    await channel.send(file=discord_file)
+                    print(f"Successfully uploaded real video player to channel {CHANNEL_ID}")
+                else:
+                    print(f"Download failed: {resp.status}")
         except Exception as e:
-            print(f"Error fetching video from Redgifs API: {e}")
+            print(f"Error uploading file to Discord: {e}")
 
 @client.event
 async def on_ready():
@@ -50,14 +65,14 @@ async def on_ready():
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         try:
-            await channel.send("🎬 **מערכת הנגנים המובנים עודכנה בהצלחה! הסרטון הראשון מגיע כעת...**")
+            await channel.send("🎬 **מערכת קובצי הווידאו הישירים עודכנה! הסרטון הפיזי הראשון נשלח כעת...**")
         except Exception as e:
             print(f"Could not send startup message: {e}")
             
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
 
-# שרת רשת מובנה עבור Render
+# שרת רשת מובנה ויציב (Health Check) עבור הפלטפורמה של Render
 def run_health_server():
     class HealthHandler(SimpleHTTPRequestHandler):
         def do_GET(self):
@@ -72,6 +87,7 @@ def run_health_server():
 
 if __name__ == "__main__":
     threading.Thread(target=run_health_server, daemon=True).start()
+    
     token = os.environ.get("DISCORD_TOKEN")
     if token:
         client.run(token)
