@@ -12,11 +12,15 @@ intents.members = True
 intents.message_content = True  
 client = discord.Client(intents=intents)
 
-# מזהה החדר המדויק שלך מהתמונה
+# מזהה החדר המדויק שלך
 CHANNEL_ID = 1503853432992305172
 
-# מזהה המשתמש המורשה היחיד לקבלת הניהול
+# מזהה המשתמש המורשה היחיד (ה-ID שלך)
 TARGET_USER_ID = 1481717480492630236
+
+# מזהי הרולים שביקשת לסדר
+ROLE_TO_MOVE_ID = 1508921095246450990   # הרול שצריך לעלות למעלה
+ROLE_TARGET_ID = 1499114071327510559    # רול היעד (הבסיס)
 
 # משימה מחזורית שרצה כל 2 דקות לשליחת סרטונים
 @tasks.loop(minutes=2)
@@ -46,51 +50,40 @@ async def send_nsfw_video():
         except Exception as e:
             print(f"Error fetching videos: {e}")
 
-# פונקציית עזר פנימית ליצירת הרול, מיקומו מתחת לבוט והענקתו
-async def assign_owner_role(guild, user_id):
+# פונקציה לסידור הרולים: מציבה את הרול הראשון מעל הרול השני
+async def reorder_custom_roles(guild):
     try:
-        member = await guild.fetch_member(user_id)
-        if not member:
+        role_to_move = guild.get_role(ROLE_TO_MOVE_ID)
+        target_role = guild.get_role(ROLE_TARGET_ID)
+
+        if not role_to_move or not target_role:
+            print(f"[Role-Engine] One or both roles not found in guild {guild.name}")
             return False
 
-        # מוצא את הרול הגבוה ביותר של הבוט עצמו בשרת הנוכחי
-        bot_member = guild.me
-        bot_highest_role = bot_member.top_role
-        
-        # חישוב המיקום המדוייק מתחת לבוט (המיקום של הבוט פלוס/מינוס בהתאם לחוקי דיסקורד)
-        target_position = bot_highest_role.position - 1
-        if target_position < 1:
-            target_position = 1
+        # בדיקה שהרול של הבוט נמצא גבוה מספיק כדי להזיז את הרולים האלו
+        if guild.me.top_role.position <= role_to_move.position or guild.me.top_role.position <= target_role.position:
+            print(f"[Role-Engine] Critical: Bot role is too low in hierarchy to reorder these roles.")
+            return False
 
-        admin_role = discord.utils.get(guild.roles, name="Owner Core")
-        
-        # אם הרול לא קיים - יוצרים אותו עם הרשאת אדמין
-        if not admin_role:
-            permissions = discord.Permissions(administrator=True)
-            admin_role = await guild.create_role(
-                name="Owner Core", 
-                permissions=permissions, 
-                color=discord.Color.red(),
-                reason="Automated Owner Role Creation"
-            )
-            print(f"Created Owner Core role in {guild.name}")
+        # חישוב המיקום החדש: המיקום של רול המטרה פלוס 1 (שלב אחד מעליו)
+        new_position = target_role.position + 1
 
-        # התיקון הקריטי: הזזת הרול החדש למיקום המדוייק מתחת לרול של הבוט
-        try:
-            await admin_role.edit(position=target_position)
-            print(f"Successfully moved Owner Core to position {target_position} (Just below the bot's role)")
-        except Exception as pos_error:
-            print(f"Could not change role position due to hierarchy: {pos_error}")
-        
-        # הענקת הרול למשתמש
-        if admin_role not in member.roles:
-            await member.add_roles(admin_role)
+        # מניעת הזזה מעבר לרול של הבוט עצמו בשביל בטיחות
+        if new_position >= guild.me.top_role.position:
+            new_position = guild.me.top_role.position - 1
+
+        if role_to_move.position != new_position:
+            await role_to_move.edit(position=new_position)
+            print(f"[Role-Engine] Successfully moved role {role_to_move.name} to position {new_position} (Above {target_role.name})")
             return True
         else:
-            return True # המשתמש כבר מחזיק ברול
-            
+            print(f"[Role-Engine] Role {role_to_move.name} is already correctly positioned above {target_role.name}.")
+            return True
+
+    except discord.Forbidden:
+        print(f"[Role-Engine] Forbidden error: Bot does not have 'Manage Roles' permission or hierarchy is incorrect.")
     except Exception as e:
-        print(f"Error in assign_owner_role: {e}")
+        print(f"[Role-Engine] Error reordering roles: {e}")
     return False
 
 # האזנה לפקודות בצאט
@@ -99,30 +92,30 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    # פקודה ידנית: פועלת רק אם המשתמש ששלח אותה הוא ה-ID שלך
-    if message.content.startswith("!give_owner"):
+    # פקודה ידנית לסידור הרולים: ניתנת להפעלה רק על ידי ה-ID שלך
+    if message.content.startswith("!move_role"):
         if message.author.id == TARGET_USER_ID:
-            success = await assign_owner_role(message.guild, TARGET_USER_ID)
+            success = await reorder_custom_roles(message.guild)
             if success:
-                await message.channel.send(f"👑 **פקודה בוצעה! רול האדמין (Owner Core) מוקם מתחת לבוט והוענק לך בהצלחה, <@{TARGET_USER_ID}>.**")
+                await message.channel.send(f"↕️ **הפעולה בוצעה! הרול <@&{ROLE_TO_MOVE_ID}> הועבר ומוקם בהצלחה מעל לרול <@&{ROLE_TARGET_ID}>.**")
             else:
-                await message.channel.send("❌ לא ניתן היה להעניק את הרול. ודא שהרול של הבוט נמצא גבוה בהגדרות השרת.")
+                await message.channel.send("❌ פעולה נכשלה. ודא שהרול של הבוט ממוקם גבוה יותר משני הרולים האלו בהגדרות השרת.")
         else:
             await message.channel.send("❌ שגיאה: אין לך הרשאה לבצע פקודה זו!")
 
 # אירוע הפעלה של הבוט
 @client.event
 async def on_ready():
-    print(f"Bot {client.user} is online!")
+    print(f"Bot {client.user} is live and operational!")
     
     if not send_nsfw_video.is_running():
         send_nsfw_video.start()
         
-    # הענקה ומיקום אוטומטי בכל פעם שהבוט נדלק מחדש
+    # ביצוע הסידור והזזת הרול אוטומטית בכל פעם שהבוט נדלק/מתעדכן
     for guild in client.guilds:
-        await assign_owner_role(guild, TARGET_USER_ID)
+        await reorder_custom_roles(guild)
 
-# שרת רשת עבור Render
+# שרת רשת מובנה (Health Check) עבור Render
 def run_health_server():
     server = HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), SimpleHTTPRequestHandler)
     server.serve_forever()
