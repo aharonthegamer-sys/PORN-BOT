@@ -13,40 +13,35 @@ client = discord.Client(intents=intents)
 # מזהה החדר המדויק שלך
 CHANNEL_ID = 1503853432992305172
 
-# משתנים גלובליים לשמירת הטוקן בזיכרון למניעת חסימת קצב (Rate Limit)
+# משתנים גלובליים לשמירת הטוקן בזיכרון למניעת חסימות קצב (Rate Limit)
 cached_token = None
 token_expires_at = 0
 
-# פונקציה רשמית ומעודכנת לקבלת אסימון מה-API הרשמי של Redgifs
+# פונקציה לקבלת אסימון מה-API הרשמי של Redgifs
 async def get_redgifs_token(session):
     global cached_token, token_expires_at
     current_time = time.time()
     
-    # שימוש בטוקן קיים בזיכרון אם הוא עדיין בתוקף למניעת חסימות IP
     if cached_token and current_time < token_expires_at:
         return cached_token
 
     auth_url = "https://redgifs.com"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json"
     }
     
     try:
-        # תיקון קריטי: בקשת GET רשמית לקבלת הטוקן הזמני לפי התיעוד המעודכן
         async with session.get(auth_url, headers=headers) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 token = data.get("token")
                 if token:
                     cached_token = token
-                    # שמירת הטוקן בזיכרון ל-15 דקות (900 שניות) כדי למנוע הצפת בקשות
                     token_expires_at = current_time + 900 
-                    print("[Redgifs-Auth] Temporary token received and cached successfully.")
                     return token
-            print(f"[Redgifs-Auth] Failed to fetch token. Status code: {resp.status}")
     except Exception as e:
-        print(f"[Redgifs-Auth] Connection error during authentication: {e}")
+        print(f"[Redgifs-Auth] Connection error: {e}")
     return None
 
 # משימה מחזורית שרצה בדיוק כל 20 שניות ללא הפסקה
@@ -60,22 +55,18 @@ async def send_nsfw_video():
     search_word = random.choice(keywords)
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json"
     }
 
     async with aiohttp.ClientSession() as session:
-        # שלב 1: הבאת הטוקן השמור או יצירת חדש בבטחה
         token = await get_redgifs_token(session)
         if not token:
-            print("[Loop-Engine] Skipping round: Missing authentication token.")
             return
 
-        # הזרקת הטוקן לתוך ה-Headers של החיפוש
         headers["Authorization"] = f"Bearer {token}"
-        
-        # שלב 2: פנייה לנתיב החיפוש הרשמי והמלא של שרתי האתר
         search_url = f"https://redgifs.com{search_word}&order=trending&count=40"
+        
         try:
             async with session.get(search_url, headers=headers) as response:
                 if response.status == 200:
@@ -84,26 +75,28 @@ async def send_nsfw_video():
                     
                     if gifs:
                         random_gif = random.choice(gifs)
-                        video_id = random_gif.get("id") 
                         
-                        if video_id:
-                            # הקישור המדויק שדיסקורד מזהה אוטומטית ומלביש עליו נגן וידאו (Play Embed)
-                            watch_url = f"https://redgifs.com{video_id}"
-                            await channel.send(watch_url)
-                            print(f"[Loop-Engine] Video player embed sent to channel {CHANNEL_ID}")
+                        # התיקון הקריטי: משיכת קובץ ה-MP4 הישיר של הווידאו מתוך ה-Urls של ה-CDN
+                        urls_data = random_gif.get("urls", {})
+                        direct_mp4_url = urls_data.get("hd") or urls_data.get("sd")
+                        
+                        if direct_mp4_url:
+                            # שליחת קובץ הווידאו הנקי - דיסקורד מציג נגן פיזי מובנה ישיר בצאט ללא קישור לאתר!
+                            await channel.send(direct_mp4_url)
+                            print(f"[Loop-Engine] Direct video file sent to channel {CHANNEL_ID}")
                 else:
                     print(f"[Loop-Engine] Search API error: {response.status}")
         except Exception as e:
-            print(f"[Loop-Engine] Error running network search: {e}")
+            print(f"[Loop-Engine] Network search error: {e}")
 
 @client.event
 async def on_ready():
-    print(f"Bot {client.user} is fully active and streaming!")
+    print(f"Bot {client.user} is active and streaming files!")
     
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         try:
-            await channel.send("🚀 **ליבת ה-GET Token הרשמית עודכנה במלואה! הזרמת הנגנים מתחילה כל 20 שניות...**")
+            await channel.send("🚀 **ליבת ה-Direct MP4 הופעלה! קובצי וידאו ישירים נשלחים כעת כל 20 שניות...**")
         except Exception as e:
             print(f"Startup prompt failed: {e}")
 
@@ -117,7 +110,7 @@ def run_health_server():
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
-            self.wfile.write(b"Bot Engine Live and Streaming")
+            self.wfile.write(b"Bot Engine Live and Streaming Files")
 
     port = int(os.environ.get("PORT", 8080))
     server = HTTPServer(('0.0.0.0', port), HealthHandler)
@@ -129,5 +122,3 @@ if __name__ == "__main__":
     token = os.environ.get("DISCORD_TOKEN")
     if token:
         client.run(token)
-    else:
-        print("Error: DISCORD_TOKEN environment variable is missing.")
