@@ -17,32 +17,32 @@ CHANNEL_ID = 1503853432992305172
 cached_token = None
 token_expires_at = 0
 
-# פונקציה מקצועית ומעודכנת לקבלת אסימון מה-API הרשמי של Redgifs
+# פונקציה רשמית ומעודכנת לקבלת אסימון מה-API הרשמי של Redgifs
 async def get_redgifs_token(session):
     global cached_token, token_expires_at
     current_time = time.time()
     
-    # אם יש טוקן קיים בזיכרון והוא עדיין בתוקף (תוקף ל-20 דקות), נשתמש בו שוב
+    # שימוש בטוקן קיים בזיכרון אם הוא עדיין בתוקף למניעת חסימות IP
     if cached_token and current_time < token_expires_at:
         return cached_token
 
-    auth_url = "https://api.redgifs.com/v2/auth/temporary"
+    auth_url = "https://redgifs.com"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json"
     }
     
     try:
-        # תיקון קריטי 1: בקשת POST ולא GET לפי התיעוד הרשמי של Redgifs
-        async with session.post(auth_url, headers=headers) as resp:
+        # תיקון קריטי: בקשת GET רשמית לקבלת הטוקן הזמני לפי התיעוד המעודכן
+        async with session.get(auth_url, headers=headers) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 token = data.get("token")
                 if token:
                     cached_token = token
-                    # שמירת הטוקן למשך 15 דקות הבאות (900 שניות) למניעת חסימות IP
+                    # שמירת הטוקן בזיכרון ל-15 דקות (900 שניות) כדי למנוע הצפת בקשות
                     token_expires_at = current_time + 900 
-                    print("[Redgifs-Auth] New temporary token generated and cached successfully.")
+                    print("[Redgifs-Auth] Temporary token received and cached successfully.")
                     return token
             print(f"[Redgifs-Auth] Failed to fetch token. Status code: {resp.status}")
     except Exception as e:
@@ -68,13 +68,13 @@ async def send_nsfw_video():
         # שלב 1: הבאת הטוקן השמור או יצירת חדש בבטחה
         token = await get_redgifs_token(session)
         if not token:
-            print("[Loop-Engine] Skipping this round due to missing authentication token.")
+            print("[Loop-Engine] Skipping round: Missing authentication token.")
             return
 
         # הזרקת הטוקן לתוך ה-Headers של החיפוש
         headers["Authorization"] = f"Bearer {token}"
         
-        # שלב 2: חיפוש באמצעות נתיב ה-API התקין והמלא
+        # שלב 2: פנייה לנתיב החיפוש הרשמי והמלא של שרתי האתר
         search_url = f"https://redgifs.com{search_word}&order=trending&count=40"
         try:
             async with session.get(search_url, headers=headers) as response:
@@ -88,9 +88,9 @@ async def send_nsfw_video():
                         
                         if video_id:
                             # הקישור המדויק שדיסקורד מזהה אוטומטית ומלביש עליו נגן וידאו (Play Embed)
-                            watch_url = f"https://www.redgifs.com/watch/{video_id}"
+                            watch_url = f"https://redgifs.com{video_id}"
                             await channel.send(watch_url)
-                            print(f"[Loop-Engine] Video player sent to channel {CHANNEL_ID}")
+                            print(f"[Loop-Engine] Video player embed sent to channel {CHANNEL_ID}")
                 else:
                     print(f"[Loop-Engine] Search API error: {response.status}")
         except Exception as e:
@@ -98,12 +98,12 @@ async def send_nsfw_video():
 
 @client.event
 async def on_ready():
-    print(f"Bot {client.user} is fully authenticated and ready!")
+    print(f"Bot {client.user} is fully active and streaming!")
     
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         try:
-            await channel.send("🚀 **המערכת אופטמלה במלואה עם מנגנון ה-POST Token הרשמי! הזרמת הנגנים מתחילה כל 20 שניות...**")
+            await channel.send("🚀 **ליבת ה-GET Token הרשמית עודכנה במלואה! הזרמת הנגנים מתחילה כל 20 שניות...**")
         except Exception as e:
             print(f"Startup prompt failed: {e}")
 
