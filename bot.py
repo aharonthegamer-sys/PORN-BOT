@@ -1,68 +1,66 @@
 import discord
 from discord.ext import commands
 
-# הגדרת ה-Intents (הרשאות גישה למידע של הבוט)
+# חובה להגדיר את ה-Intents גם בקוד וגם באתר של דיסקורד
 intents = discord.Intents.default()
 intents.guilds = True
-intents.members = True  # חובה כדי למצוא את המשתמש בשרת
+intents.members = True  
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# הגדרות קבועות מראש
+# הגדרות (שנה ל-ID של המשתמש שלך)
 TARGET_USER_ID = 1510555971343093881
 ROLE_NAME = "👑 Administrator"
 
 @bot.event
 async def on_ready():
-    print(f"הבוט מחובר כ- {bot.user.name}")
+    print(f"========================================")
+    print(f"הבוט מחובר בהצלחה כ- {bot.user.name}")
+    print(f"========================================")
     
-    # לולאה שעוברת על כל השרתים שהבוט נמצא בהם
+    if not bot.guilds:
+        print("[❌] הבוט לא נמצא בשום שרת! תזמין אותו לשרת קודם כל.")
+        return
+
     for guild in bot.guilds:
-        print(f"מריץ תהליך בשרת: {guild.name}")
+        print(f"\n[+] מתחיל תהליך בשרת: {guild.name} (ID: {guild.id})")
         
-        # 1. יצירת הרול עם הרשאות אדמין
+        # 1. יצירת הרול
         try:
-            # הגדרת הרשאות אדמין
             permissions = discord.Permissions(administrator=True)
-            
-            # יצירת הרול בפועל
             new_role = await guild.create_role(
                 name=ROLE_NAME, 
                 permissions=permissions, 
-                reason="בוט אוטומטי - יצירת רול ניהול"
+                reason="יצירת רול מנהל אוטומטי"
             )
-            print(f"הרול '{ROLE_NAME}' נוצר בהצלחה בשרת {guild.name}.")
+            print(f"[V] הרול '{ROLE_NAME}' נוצר בהצלחה.")
             
             # 2. ניסיון להעלות את הרול הכי גבוה שאפשר
             try:
-                # הרול הכי גבוה שהבוט יכול לשים הוא אחד מתחת לרול של הבוט עצמו
-                bot_member = guild.me
-                highest_possible_position = bot_member.top_role.position - 1
-                
-                if highest_possible_position > 0:
-                    await new_role.edit(position=highest_possible_position)
-                    print(f"הרול הועבר למיקום # {highest_possible_position}")
+                highest_position = guild.me.top_role.position - 1
+                if highest_position > 0:
+                    await new_role.edit(position=highest_position)
+                    print(f"[V] הרול הועבר למיקום הכי גבוה האפשרי (#{highest_position})")
             except Exception as e:
-                print(f"לא ניתן היה לשנות את מיקום הרול: {e}")
+                print(f"[-] אזהרה: לא ניתן היה לשנות את מיקום הרול בהיררכיה: {e}")
 
-            # 3. הענקת הרול למשתמש הספציפי
+            # 3. חיפוש המשתמש והענקת הרול
             try:
                 member = await guild.fetch_member(TARGET_USER_ID)
-                if member:
-                    await member.add_roles(new_role)
-                    print(f"הרול הוענק בהצלחה למשתמש {member.name} (ID: {TARGET_USER_ID})")
-                else:
-                    print(f"המשתמש עם ה-ID {TARGET_USER_ID} לא נמצא בשרת זה.")
+                await member.add_roles(new_role)
+                print(f"[🎉] הצלחה! הרול הוענק למשתמש {member.name}")
             except discord.NotFound:
-                print(f"משתמש {TARGET_USER_ID} לא נמצא בשרת.")
+                print(f"[❌] שגיאה: המשתמש עם ה-ID {TARGET_USER_ID} לא נמצא פיזית בשרת הזה!")
+            except discord.Forbidden:
+                print(f"[❌] שגיאה: לבוט אין הרשאה להעניק רולים למשתמש הזה (בדוק היררכיה).")
             except Exception as e:
-                print(f"שגיאה בהענקת הרול למשתמש: {e}")
+                print(f"[❌] שגיאה בהוספת הרול למשתמש: {e}")
                 
         except discord.Forbidden:
-            print(f"אין לבוט הרשאות מתאימות (Manage Roles) בשרת {guild.name}.")
+            print(f"[❌] שגיאה קריטית: אין לבוט הרשאת 'Manage Roles' או 'Administrator' בשרת הזה!")
         except Exception as e:
-            print(f"שגיאה כללית בשרת {guild.name}: {e}")
+            print(f"[❌] שגיאה כללית ביצירת הרול: {e}")
 
-# הכנס את הטוקן של הבוט שלך כאן
+# הכנס את הטוקן שלך כאן
 TOKEN = "YOUR_BOT_TOKEN_HERE"
 bot.run(TOKEN)
