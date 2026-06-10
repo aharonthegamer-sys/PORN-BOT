@@ -1,14 +1,13 @@
 import os
 import discord
 import asyncio
-from discord import app_commands
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# הגדרת Intents מלאה
+# הגדרת Intents מלאה למניעת חסימות
 intents = discord.Intents.default()
 intents.guilds = True
 intents.messages = True       
@@ -16,9 +15,10 @@ intents.message_content = True
 intents.members = True        
 intents.moderation = True     
 
+# הגדרת הקידומת לסימן קריאה (!)
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# הגדרת הרולים והאימוג'ים המשודרגים
+# הגדרת הרולים והאימוג'ים המדויקים שביקשת
 ROLES_CONFIG = [
     {"name": "👑 Owner", "color": discord.Color.red()},
     {"name": "💍 Co-Owner", "color": discord.Color.dark_red()},
@@ -125,9 +125,9 @@ class TicketLaunchView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    async def create_ticket(self, interaction: discord.Interaction, ticket_type: str, category_name: str):
-        guild = interaction.guild
-        member = interaction.user
+    async def create_ticket(self, ctx_or_interaction, ticket_type: str, category_name: str):
+        guild = ctx_or_interaction.guild
+        member = ctx_or_interaction.user if hasattr(ctx_or_interaction, 'user') else ctx_or_interaction.author
         staff_role = discord.utils.get(guild.roles, name="🛠️ Staff")
         category = discord.utils.get(guild.categories, name=category_name)
         
@@ -140,7 +140,9 @@ class TicketLaunchView(View):
                 staff_role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
             }
         )
-        await interaction.response.send_message(f"✅ כרטיס התמיכה שלך נפתח בהצלחה: {ticket_channel.mention}", ephemeral=True)
+        
+        if hasattr(ctx_or_interaction, 'response'):
+            await ctx_or_interaction.response.send_message(f"✅ כרטיס התמיכה שלך נפתח בהצלחה: {ticket_channel.mention}", ephemeral=True)
         
         embed = discord.Embed(
             title=f"🎫 פנייה בנושא: {ticket_type.upper()}",
@@ -179,7 +181,7 @@ class VerifyView(View):
                 await member.add_roles(member_role)
                 await interaction.response.send_message("🎉 **אומתת בהצלחה! כל ערוצי השרת נפתחו בפניך.**", ephemeral=True)
 
-# ==================== 🤖 חיבור הבוט וסנכרון פקודות סלאש ====================
+# ==================== 🤖 טעינת המערכת באונליין ====================
 @bot.event
 async def setup_hook():
     bot.add_view(VerifyView())
@@ -191,28 +193,21 @@ async def setup_hook():
 @bot.event
 async def on_ready():
     print(f"========================================")
-    print(f"🤖 הבוט {bot.user.name} באונליין!")
-    try:
-        # סנכרון פקודות הסלאש מול דיסקורד
-        synced = await bot.tree.sync()
-        print(f"🔄 סונכרנו בהצלחה {len(synced)} פקודות סלאש!")
-    except Exception as e:
-        print(f"❌ שגיאה בסנכרון פקודות: {e}")
+    print(f"🤖 הבוט {bot.user.name} דלוק, מחובר ומוכן לעבודה!")
     print(f"========================================")
 
-# ==================== 🚀 פקודת הסלאש המאובטחת להקמה ====================
-@bot.tree.command(name="setup", description="מקים את כל מערך החדרים, הרולים והפאנלים של השרת אוטומטית")
-@app_commands.checks.has_permissions(administrator=True)
-async def setup_server(interaction: discord.Interaction):
-    guild = interaction.guild
+# ==================== 🚀 פקודת ההקמה הישירה בטקסט: !setup ====================
+@bot.command(name="setup")
+@commands.has_permissions(administrator=True)
+async def setup_server_old_school(ctx):
+    guild = ctx.guild
     
-    # בדיקה אם השרת כבר הוקם בעבר
+    # בדיקה למניעת הקמה כפולה
     if discord.utils.get(guild.categories, name="─── 👋🏽 ברוכים הבאים ───"):
-        await interaction.response.send_message("❌ השרת כבר הוקם בעבר! לא ניתן להריץ את הפקודה שוב.", ephemeral=True)
+        await ctx.send("❌ השרת כבר הוקם בעבר! לא ניתן להריץ את ההקמה שוב כדי לא להרוס הגדרות קיימות.")
         return
 
-    # שליחת הודעה ראשונית כדי שהאינטראקציה לא תפוג
-    await interaction.response.send_message("🏗️ **ההקמה החלה! בונה את השרת עם דרגות האימוג'ים החדשות...**")
+    status_msg = await ctx.send("🏗️ **ההקמה החלה ישירות מקוד הצ'אט! מייצר רולים ודרגות...**")
 
     # 1. יצירת רולים לפי הגדרת היררכיה וצבעים
     created_roles = {}
@@ -277,16 +272,15 @@ async def setup_server(interaction: discord.Interaction):
     await guild.create_text_channel("🔨-ענישות-וחסימות", category=log_category)
     await guild.create_text_channel("💬-לוגים-צ׳אט", category=log_category)
     
-    # שליחת הודעת סיום בחדר שבו הופעלה הפקודה
-    await interaction.followup.send("👑 **השרת הוקם מחדש ב-100%! כל הרולים, הקטגוריות והפאנלים המבוקשים נוצרו.**")
+    await status_msg.edit(content="👑 **השרת הוקם קומפלט ב-100%! כל הרולים, האימוג'ים המשודרגים, הטיקטים המפוצלים, והפאנלים מוכנים לשימוש ברגע זה.**")
 
-# שגיאה במקרה של הרצה על ידי מישהו שאינו אדמין
-@setup_server.error
-async def setup_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.errors.MissingPermissions):
-        await interaction.response.send_message("❌ פקודה זו מיועדת למנהלי מערכת (Administrator) בלבד!", ephemeral=True)
+# שגיאה אם משתמש רגיל מנסה להריץ את זה
+@setup_server_old_school.error
+async def setup_old_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ פקודה זו חסומה! רק משתמש עם הרשאות מנהל מערכת (Administrator) יכול להקים את השרת.")
 
-# ==================== 📜 מערכת לוגים אוטומטית ====================
+# ==================== 📜 מערכת אבטחה ולוגים אוטומטית ====================
 @bot.event
 async def on_member_join(member):
     guild = member.guild
@@ -299,10 +293,16 @@ async def on_member_join(member):
 @bot.event
 async def on_message(message):
     if message.author.bot: return
+    
+    # חסימת קישורים קשוחה למניעת סקאם
     if "http://" in message.content or "https://" in message.content or "discord.gg/" in message.content:
         if not message.author.guild_permissions.administrator:
             await message.delete()
             await message.channel.send(f"⚠️ {message.author.mention}, **אין לשלוח קישורים בשרת זה!**", delete_after=5)
+            return
+
+    # הפעלת עיבוד פקודות הטקסט
+    await bot.process_commands(message)
 
 @bot.event
 async def on_member_update(before, after):
