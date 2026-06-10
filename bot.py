@@ -16,7 +16,7 @@ intents.moderation = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# קונפיגורציית הרולים היוקרתית
+# 👑 קונפיגורציית רולים יוקרתית ומסודרת
 ROLES_CONFIG = [
     {"name": "👑 Owner", "color": discord.Color.red()},
     {"name": "💍 Co-Owner", "color": discord.Color.dark_red()},
@@ -31,52 +31,52 @@ ROLES_CONFIG = [
     {"name": "👤 חבר שרת", "color": discord.Color.green()}
 ]
 
-# ==================== 🎫 כפתורי ניהול בתוך הטיקט ====================
+# ==================== 🎫 פאנל שליטה מתקדם בתוך הטיקט ====================
 
-class RenameTicketModal(Modal, title="✏️ שינוי שם הטיקט"):
+class RenameTicketModal(Modal, title="✏️ SYSTEM │ RENAME"):
     new_name = TextInput(label="שם החדר החדש", placeholder="לדוגמה: general-help", required=True)
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.channel.edit(name=self.new_name.value)
-        await interaction.response.send_message(f"📢 שם החדר שונה בהצלחה ל-`{self.new_name.value}`", ephemeral=True)
+        await interaction.channel.edit(name=f"🎫-{self.new_name.value}")
+        await interaction.response.send_message(f"✨ שם החדר שונה בהצלחה ל-`🎫-{self.new_name.value}`", ephemeral=True)
 
-class AddMemberModal(Modal, title="👤 הוספת חבר לטיקט"):
+class AddMemberModal(Modal, title="👤 SYSTEM │ ADD MEMBER"):
     user_id = TextInput(label="ID של המשתמש להוספה", placeholder="הכנס מספר ID...", required=True)
     async def on_submit(self, interaction: discord.Interaction):
         try:
             member = await interaction.guild.fetch_member(int(self.user_id.value))
             if member:
                 await interaction.channel.set_permissions(member, view_channel=True, send_messages=True, read_message_history=True)
-                await interaction.response.send_message(f"✅ המשתמש {member.mention} נוסף לטיקט בהצלחה!", ephemeral=True)
+                await interaction.response.send_message(f"✅ {member.mention} נוסף לטיקט בהצלחה!", ephemeral=True)
         except:
-            await interaction.response.send_message("❌ משתמש לא נמצא או שה-ID לא תקין.", ephemeral=True)
+            await interaction.response.send_message("❌ משתמש לא נמצא או תוקף ה-ID פג.", ephemeral=True)
 
 class TicketManageView(View):
     def __init__(self): super().__init__(timeout=None)
 
-    @discord.ui.button(label="🔒 סגור פנייה", style=discord.ButtonStyle.danger, custom_id="tk_manage_close")
+    @discord.ui.button(label="🔒 סגור פנייה", style=discord.ButtonStyle.danger, custom_id="tk_close")
     async def close_btn(self, interaction: discord.Interaction, b: Button):
-        await interaction.response.send_message("🔒 **החדר ייסגר ויימחק לצמיתות בעוד 5 שניות...**")
+        await interaction.response.send_message("🔒 **הפנייה תיסגר ותימחק מהמערכת בעוד 5 שניות...**")
         await asyncio.sleep(5)
         await interaction.channel.delete()
 
-    @discord.ui.button(label="✏️ שינוי שם", style=discord.ButtonStyle.secondary, custom_id="tk_manage_rename")
+    @discord.ui.button(label="✏️ שינוי שם", style=discord.ButtonStyle.secondary, custom_id="tk_rename")
     async def rename_btn(self, interaction: discord.Interaction, b: Button):
         await interaction.response.send_modal(RenameTicketModal())
 
-    @discord.ui.button(label="👤 הוספת חבר", style=discord.ButtonStyle.primary, custom_id="tk_manage_add")
+    @discord.ui.button(label="👤 הוספת חבר", style=discord.ButtonStyle.secondary, custom_id="tk_add")
     async def add_btn(self, interaction: discord.Interaction, b: Button):
         await interaction.response.send_modal(AddMemberModal())
 
-    @discord.ui.button(label="🔄 העברה לצוות בכיר", style=discord.ButtonStyle.success, custom_id="tk_manage_transfer")
+    @discord.ui.button(label="🔄 העברה לצוות בכיר", style=discord.ButtonStyle.primary, custom_id="tk_transfer")
     async def transfer_btn(self, interaction: discord.Interaction, b: Button):
         guild = interaction.guild
         staff_role = discord.utils.get(guild.roles, name="🛠️ Staff")
         high_staff_role = discord.utils.get(guild.roles, name="⚔️ High Staff")
         await interaction.channel.set_permissions(staff_role, view_channel=False)
         await interaction.channel.set_permissions(high_staff_role, view_channel=True, send_messages=True)
-        await interaction.response.send_message("🚀 **הטיקט הועבר בהצלחה לטיפול של דרג High Staff ומעלה בלבד!**")
+        await interaction.response.send_message("🚀 **הטיקט הועבר בהצלחה לדרג ניהול בכיר בלבד.**")
 
-# ==================== 📬 פאנל פתיחת הטיקטים הראשי ====================
+# ==================== 📬 פאנל יצירת הטיקטים הראשי ====================
 
 class TicketLaunchView(View):
     def __init__(self): super().__init__(timeout=None)
@@ -87,7 +87,7 @@ class TicketLaunchView(View):
         category = discord.utils.get(guild.categories, name=cat_name)
         
         chan = await guild.create_text_channel(
-            name=f"🎫-{t_type}-{interaction.user.name}",
+            name=f"ticket-{t_type}-{interaction.user.name}",
             category=category,
             overwrites={
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -95,14 +95,14 @@ class TicketLaunchView(View):
                 staff_role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
             }
         )
-        await interaction.response.send_message(f"✅ כרטיס התמיכה שלך נפתח בהצלחה: {chan.mention}", ephemeral=True)
+        await interaction.response.send_message(f"✅ פנייתך נפתחה בהצלחה בחדר: {chan.mention}", ephemeral=True)
         
         embed = discord.Embed(
-            title="⚡ פנייה חדשה נפתחה במערכת ⚡",
-            description=f"שלום {interaction.user.mention},\nנציג מצוות הניהול יתפנה אלייך ברגעים אלו.\n\n**🛠️ פאנל ניהול מהיר לצוות:**",
-            color=discord.Color.from_rgb(47, 49, 54)
+            title="🎯 TICKET DISPATCH │ פנייה חדשה",
+            description=f"שלום {interaction.user.mention},\nנציג משירות הסטאף של השרת יתפנה אליך בהקדם.\n\nשתף אותנו כאן בנושא פנייתך כדי שנוכל לעזור בצורה המהירה ביותר.",
+            color=0x2f3136
         )
-        embed.set_footer(text="PRRP System Integration")
+        embed.set_footer(text="PRRP Premium System Integration")
         await chan.send(content=f"{interaction.user.mention} | {staff_role.mention if staff_role else ''}", embed=embed, view=TicketManageView())
 
     @discord.ui.button(label="❓ שאלה כללית", style=discord.ButtonStyle.secondary, custom_id="tk_gen")
@@ -114,23 +114,23 @@ class TicketLaunchView(View):
 
 # ==================== ⚠️ מערכת אזהרות (WARNS) ====================
 
-class WarnModal(Modal, title="🚨 מתן אזהרה למשתמש"):
+class WarnModal(Modal, title="🚨 SYSTEM │ ISSUE WARN"):
     user_id = TextInput(label="ID של המשתמש / User ID", placeholder="הכנס את ה-ID...", required=True)
     reason = TextInput(label="סיבת האזהרה", style=discord.TextStyle.long, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
-        warn_log = discord.utils.get(interaction.guild.text_channels, name="🚨-לוג-אזהרות")
+        warn_log = discord.utils.get(interaction.guild.text_channels, name="🚨│לוג-אזהרות")
         if not warn_log: return
         try:
             target = await bot.fetch_user(int(self.user_id.value))
-            embed = discord.Embed(title="🚨 אזהרת מערכת רשמית", color=discord.Color.red())
+            embed = discord.Embed(title="🚨 CRIME & PUNISHMENT │ אזהרה", color=discord.Color.red())
             embed.add_field(name="👤 הוזהר:", value=f"{target.mention}", inline=True)
             embed.add_field(name="🛡️ המזהיר:", value=interaction.user.mention, inline=True)
             embed.add_field(name="📝 סיבה:", value=f"```\n{self.reason.value}\n```", inline=False)
             await warn_log.send(embed=embed)
             await interaction.response.send_message("✅ האזהרה נרשמה בהצלחה בלוגים!", ephemeral=True)
         except:
-            await interaction.response.send_message("❌ המשתמש לא נמצא.", ephemeral=True)
+            await interaction.response.send_message("❌ המשתמש לא נמצא ברשת.", ephemeral=True)
 
 class WarnPanelView(View):
     def __init__(self): super().__init__(timeout=None)
@@ -144,14 +144,14 @@ class WarnPanelView(View):
 
 # ==================== 💡 מערכת הצעות (SUGGESTIONS) ====================
 
-class SuggestionModal(Modal, title="💡 שליחת הצעה חדשה"):
+class SuggestionModal(Modal, title="💡 SYSTEM │ SUGGESTION"):
     title_input = TextInput(label="נושא ההצעה", required=True)
     suggestion = TextInput(label="פירוט ההצעה", style=discord.TextStyle.long, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
-        sug_board = discord.utils.get(interaction.guild.text_channels, name="📊-לוח-הצעות")
+        sug_board = discord.utils.get(interaction.guild.text_channels, name="📊│לוח-הצעות")
         if not sug_board: return
-        embed = discord.Embed(title=f"💡 הצעה: {self.title_input.value}", description=self.suggestion.value, color=discord.Color.gold())
+        embed = discord.Embed(title=f"💡 הצעה: {self.title_input.value}", description=self.suggestion.value, color=0xf1c40f)
         embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
         msg = await sug_board.send(embed=embed)
         await msg.add_reaction("👍")
@@ -172,10 +172,10 @@ class VerifyView(View):
     async def vf_btn(self, interaction: discord.Interaction, b: Button):
         r = discord.utils.get(interaction.guild.roles, name="👤 חבר שרת")
         if r in interaction.user.roles:
-            await interaction.response.send_message("❌ אתה כבר מאומת במערכת!", ephemeral=True)
+            await interaction.response.send_message("❌ המערכת מזהה שאתה כבר מאומת!", ephemeral=True)
         else:
             await interaction.user.add_roles(r)
-            await interaction.response.send_message("🎉 ברוך הבא! האימות עבר בהצלחה והשרת נפתח בפניך.", ephemeral=True)
+            await interaction.response.send_message("🎉 אימות עבר בהצלחה! תפקיד חבר שרת הוענק לך, תהנה!", ephemeral=True)
 
 # ==================== 🤖 איתחול וחיבור הבוט ====================
 
@@ -189,7 +189,7 @@ async def setup_hook():
 
 @bot.event
 async def on_ready():
-    print(f"🤖 PRRP Engine באונליין מוכן ומסונכרן!")
+    print(f"🤖 PRRP Core Engine Online!")
     bot.loop.create_task(update_stats_loop())
 
 async def update_stats_loop():
@@ -197,28 +197,26 @@ async def update_stats_loop():
     while not bot.is_closed():
         for guild in bot.guilds:
             for channel in guild.channels:
-                if channel.name.startswith("👥 סה״כ חברים:"):
-                    try: await channel.edit(name=f"👥 סה״כ חברים: {guild.member_count}")
+                if channel.name.startswith("👥 │ סה״כ חברים:"):
+                    try: await channel.edit(name=f"👥 │ סה״כ חברים: {guild.member_count}")
                     except: pass
         await asyncio.sleep(120)
 
 # ==================== 💥 פקודת ההקמה המלאה והמחיקה הסופית ====================
 
 @bot.command(name="setup")
-@commands.has_permissions(administrator=True)
 async def setup_server(ctx):
     guild = ctx.guild
     
-    # שליחת הודעה ראשונית בערוץ זמני
     status = await ctx.send("💥 **מנקה את כל השרת לחלוטין (Full Server Wipe)... מונע כפילויות!**")
 
     # מחיקה פיזית של כל ערוץ וכל קטגוריה שקיימים כרגע בשרת
     for channel in list(guild.channels):
-        if channel.id != ctx.channel.id: # לא מוחק את הערוץ הנוכחי שבו כתבת כדי שלא יקרוס
+        if channel.id != ctx.channel.id:
             try: await channel.delete()
             except: pass
 
-    # 1. יצירה וסידור מחדש של הרולים (אם קיימים, מעדכן. אם לא, מייצר)
+    # 1. יצירת רולים
     roles_map = {}
     for r_info in ROLES_CONFIG:
         role = discord.utils.get(guild.roles, name=r_info["name"])
@@ -232,15 +230,15 @@ async def setup_server(ctx):
 
     # 2. מערכת סטטיסטיקות בלייב בראש השרת
     cat_stats = await guild.create_category("📊 SERVER STATS 📊")
-    await guild.create_voice_channel(name=f"👥 סה״כ חברים: {guild.member_count}", category=cat_stats, overwrites={guild.default_role: discord.PermissionOverwrite(connect=False)})
+    await guild.create_voice_channel(name=f"👥 │ סה״כ חברים: {guild.member_count}", category=cat_stats, overwrites={guild.default_role: discord.PermissionOverwrite(connect=False)})
 
     # 3. קטגוריית אימות כניסה
     cat_welcome = await guild.create_category("─── 👋🏽 ברוכים הבאים ───")
-    v_chan = await guild.create_text_channel("🔐-verification", category=cat_welcome, overwrites={guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False), member_r: discord.PermissionOverwrite(view_channel=False)})
+    v_chan = await guild.create_text_channel("🔐│verification", category=cat_welcome, overwrites={guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False), member_r: discord.PermissionOverwrite(view_channel=False)})
     
-    vf_embed = discord.Embed(title="🛡️ שער אימות ואבטחה רשמי 🛡️", description="ברוך הבא לשרת.\nעל מנת למנוע כניסת בוטים ומשתמשי ספאם, עליך לעבור אימות.\n\n**לחץ על הכפתור הירוק למטה כדי לקבל גישה מלאה לצ'אטים!**", color=discord.Color.from_rgb(47, 49, 54))
+    vf_embed = discord.Embed(title="🛡️ PORTAL GATEWAY │ אימות אבטחה", description="ברוך הבא לקהילה.\nעל מנת למנוע כניסת בוטים ומשתמשי ספאם, עליך לעבור אימות קצר.\n\n**לחץ על הכפתור הירוק למטה כדי לקבל גישה מלאה לצ'אטים!**", color=0x2f3136)
     await v_chan.send(embed=vf_embed, view=VerifyView())
-    await guild.create_text_channel("👋🏽-welcome", category=cat_welcome)
+    await guild.create_text_channel("👋🏽│welcome", category=cat_welcome)
 
     # 4. יצירת קטגוריות לטיקטים הפעילים
     await guild.create_category("─── ❓ שאלה כללית ───", overwrites={guild.default_role: discord.PermissionOverwrite(view_channel=False), staff: discord.PermissionOverwrite(view_channel=True)})
@@ -249,34 +247,33 @@ async def setup_server(ctx):
 
     # מרכז תמיכה פומבי
     cat_hub = await guild.create_category("─── 🎫 מרכז תמיכה ───")
-    hub_ch = await guild.create_text_channel("📬-פתח-פנייה", category=cat_hub)
+    hub_ch = await guild.create_text_channel("📬│פתח-פנייה", category=cat_hub)
     
-    hub_embed = discord.Embed(title="📞 מרכז הפניות והתמיכה של הקהילה 📞", description="צריך עזרה מהצוות? יש לך שאלה או דיווח?\nבחר את הקטגוריה המתאימה ביותר מהלחצנים למטה כדי לפתוח פנייה פרטית מול אנשי הצוות.", color=discord.Color.from_rgb(47, 49, 54))
+    hub_embed = discord.Embed(title="📞 SUPPORT HUB │ מרכז הפניות והתמיכה", description="צריך עזרה מהצוות? יש לך שאלה או דיווח?\nבחר את הקטגוריה המתאימה ביותר מהלחצנים למטה כדי לפתוח פנייה פרטית מול אנשי הצוות.", color=0x2f3136)
     await hub_ch.send(embed=hub_embed, view=TicketLaunchView())
 
     # 5. פאנלים לצוות הניהול בלבד
     cat_staff = await guild.create_category("─── ⚙️ פאנלים לצוות ───", overwrites={guild.default_role: discord.PermissionOverwrite(view_channel=False), staff: discord.PermissionOverwrite(view_channel=True)})
-    warn_ch = await guild.create_text_channel("⚙️-פאנל-אזהרות", category=cat_staff, overwrites={staff: discord.PermissionOverwrite(view_channel=False), high_staff: discord.PermissionOverwrite(view_channel=True)})
+    warn_ch = await guild.create_text_channel("⚙️│פאנל-אזהרות", category=cat_staff, overwrites={staff: discord.PermissionOverwrite(view_channel=False), high_staff: discord.PermissionOverwrite(view_channel=True)})
     
-    warn_p_embed = discord.Embed(title="⚙️ פאנל אכיפה ואזהרות מנהלים ⚙️", description="פאנל זה מיועד לדרג מנהלים גבוה בלבד.\nלחץ על הלחצן על מנת לרשום אזהרה רשמית במערכת נגד משתמש.", color=discord.Color.red())
+    warn_p_embed = discord.Embed(title="⚙️ MODERATION PANEL │ אכיפה ואזהרות", description="פאנל זה מיועד לדרג מנהלים גבוה בלבד.\nלחץ על הלחצן על מנת לרשום אזהרה רשמית במערכת נגד משתמש.", color=discord.Color.red())
     await warn_ch.send(embed=warn_p_embed, view=WarnPanelView())
-    await guild.create_text_channel("🚨-לוג-אזהרות", category=cat_staff)
+    await guild.create_text_channel("🚨│לוג-אזהרות", category=cat_staff)
 
     # 6. מערכת הצעות קהילתיות
     cat_sug = await guild.create_category("─── 💡 מערכת הצעות ───")
-    sug_send = await guild.create_text_channel("💡-שלח-הצעה", category=cat_sug)
+    sug_send = await guild.create_text_channel("💡│שלח-הצעה", category=cat_sug)
     
-    sug_embed = discord.Embed(title="💡 לוח רעיונות והצעות ייעול 💡", description="יש לך רעיון מטורף לשדרוג חווית השרת?\nלחץ על הכפתור למטה, מלא את הטופס וההצעה שלך תעלה ישירות להצבעת הקהילה!", color=discord.Color.gold())
+    sug_embed = discord.Embed(title="💡 SUGGESTION HUB │ לוח רעיונות", description="יש לך רעיון מטורף לשדרוג חווית השרת?\nלחץ על הכפתור למטה, מלא את הטופס וההצעה שלך תעלה ישירות להצבעת הקהילה!", color=0xf1c40f)
     await sug_send.send(embed=sug_embed, view=SuggestionLaunchView())
-    await guild.create_text_channel("📊-לוח-הצעות", category=cat_sug)
+    await guild.create_text_channel("📊│לוח-הצעות", category=cat_sug)
 
     # 7. מערך לוגים חסוי
     cat_log = await guild.create_category("─── 📜 מערך לוגים חסוי ───", overwrites={guild.default_role: discord.PermissionOverwrite(view_channel=False), staff: discord.PermissionOverwrite(view_channel=True)})
-    await guild.create_text_channel("🗂️-ניהול-רולים", category=cat_log)
-    await guild.create_text_channel("🔨-ענישות-וחסימות", category=cat_log)
-    await guild.create_text_channel("💬-לוגים-צ׳אט", category=cat_log)
+    await guild.create_text_channel("🗂│roles-logs", category=cat_log)
+    await guild.create_text_channel("🔨│moderation-logs", category=cat_log)
+    await guild.create_text_channel("💬│chat-logs", category=cat_log)
 
-    # מחיקת החדר הזמני הישן שבו הופעלה הפקודה כדי שהכל יהיה 100% נקי
     try: await ctx.channel.delete()
     except: pass
 
@@ -289,21 +286,21 @@ async def on_message(message):
 @bot.event
 async def on_message_delete(message):
     if message.author.bot: return
-    log = discord.utils.get(message.guild.text_channels, name="💬-לוגים-צ׳אט")
+    log = discord.utils.get(message.guild.text_channels, name="💬│chat-logs")
     if log:
-        embed = discord.Embed(title="🗑️ הודעה נמחקה", color=discord.Color.red())
-        embed.add_field(name="👤 כותב:", value=message.author.mention, inline=True)
+        embed = discord.Embed(title="🗑️ MESSAGE DELETED │ הודעה נמחקה", color=discord.Color.red())
+        embed.add_field(name="👤 משתמש:", value=message.author.mention, inline=True)
         embed.add_field(name="📍 חדר:", value=message.channel.mention, inline=True)
-        embed.add_field(name="📄 תוכן:", value=f"```{message.content if message.content else 'קובץ או ריק'}```", inline=False)
+        embed.add_field(name="📄 תוכן:", value=f"```{message.content if message.content else 'קובץ או מדיה'}```", inline=False)
         await log.send(embed=embed)
 
 @bot.event
 async def on_message_edit(before, after):
     if before.author.bot or before.content == after.content: return
-    log = discord.utils.get(before.guild.text_channels, name="💬-לוגים-צ׳אט")
+    log = discord.utils.get(before.guild.text_channels, name="💬│chat-logs")
     if log:
-        embed = discord.Embed(title="📝 הודעה נערכה", color=discord.Color.orange())
-        embed.add_field(name="👤 כותב:", value=before.author.mention, inline=True)
+        embed = discord.Embed(title="📝 MESSAGE EDITED │ הודעה נערכה", color=discord.Color.orange())
+        embed.add_field(name="👤 משתמש:", value=before.author.mention, inline=True)
         embed.add_field(name="⬅️ לפני:", value=f"```{before.content}```", inline=False)
         embed.add_field(name="➡️ אחרי:", value=f"```{after.content}```", inline=False)
         await log.send(embed=embed)
